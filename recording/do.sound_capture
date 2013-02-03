@@ -1,0 +1,5 @@
+#!/bin/bash
+rm recorded.raw
+rm recorded.wav
+
+./sound_capture_mt
