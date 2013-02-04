@@ -145,7 +145,7 @@ int recordCallback( const void *inputBuffer, void *outputBuffer,
             data->endIdx = (data->endIdx + 1) % data->bufLen;
             framesRecorded++;
         }
-        finished = paComplete;
+        // finished = paComplete;
         data->isRecording = 0;
     } else {
         while (framesRecorded < framesPerBuffer && (data->endIdx + 1) % data->bufLen != data->startIdx) {
@@ -153,20 +153,27 @@ int recordCallback( const void *inputBuffer, void *outputBuffer,
             data->endIdx = (data->endIdx + 1) % data->bufLen;
             framesRecorded++;
 
+            /*  
             if (!checkSpeech(data, data->endIdx - 1)) {
                 consecutiveNoSpeech++;
             } else {
                 consecutiveNoSpeech = 0;
             }
+            */
             // fprintf(stderr, "consecutiveNoSpeech: %d\n", consecutiveNoSpeech);
 
-            if (consecutiveNoSpeech > 150) {
+            /* 
+            if (consecutiveNoSpeech > 150 && 0) {
                 fprintf(stderr, "Detected end-point at frame %d ... \n", data->endIdx);
                 data->isRecording = 0;
-                finished = paComplete;
+                // finished = paComplete;
                 break;
             }
+            */
         }
+    }
+    if (!data->isRecording) {
+        finished = paComplete;
     }
 
     pthread_mutex_unlock(&recordMutex);
@@ -249,6 +256,7 @@ int patestMain(char *sphinxfe_bin) {
     writeThreadData writeData;
     FILE  *fid = NULL;
     char cmdBuf[256];
+    long secondsRecorded = 0;
     
     data.recordedSamples = (C_DATA_TYPE *) malloc (numSamples * sizeof(C_DATA_TYPE));
     for (i = 0; i < numSamples; i++) {
@@ -285,6 +293,7 @@ int patestMain(char *sphinxfe_bin) {
         data.endIdx = 0;
         data.bufLen = numSamples;
         data.isRecording = 1;
+        secondsRecorded = 0;
 
         writeData.recordData = &data;
         writeData.fid = fid;
@@ -325,8 +334,16 @@ int patestMain(char *sphinxfe_bin) {
         while((err = Pa_IsStreamActive(stream)) == 1)
         {
             Pa_Sleep(500);
-            fprintf(stderr, "startIdx = %d, endIdx = %d\n", data.startIdx, data.endIdx ); 
+            fprintf(stderr, "startIdx = %d, endIdx = %d, second: %d\n", data.startIdx, data.endIdx, secondsRecorded); 
             fflush(stderr);
+              
+            if (secondsRecorded > 10) {
+                pthread_mutex_lock(&recordMutex);
+                data.isRecording = 0;
+                pthread_mutex_unlock(&recordMutex);
+            }
+
+            secondsRecorded++;
         }
 
         fprintf(stderr, "Waiting for write thread to join ... \n");
