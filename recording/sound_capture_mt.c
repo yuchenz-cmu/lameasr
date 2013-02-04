@@ -3,6 +3,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <math.h>
+#include <unistd.h>
 #include "portaudio.h"
 
 #define SAMPLE_RATE             (16000)
@@ -38,7 +39,7 @@ typedef struct {
 
 pthread_mutex_t recordMutex;
 
-float frameEnergy(paRecordData *recordData, long frameIdx, int frameSpan) {
+float frameEnergy(const paRecordData *recordData, const long frameIdx, const int frameSpan) {
     long startFrame;
     long endFrame;
     float energy;
@@ -68,14 +69,14 @@ float frameEnergy(paRecordData *recordData, long frameIdx, int frameSpan) {
     // energy = 10 * log10(energy) / (float)counter;
 
     for (i = startFrame; i < endFrame; i++) {
-        energy += recordData->recordedSamples[i] * recordData->recordedSamples[i];
+        energy += (recordData->recordedSamples[i] * recordData->recordedSamples[i]);
     }
     energy = sqrt(energy) / (float) (endFrame - startFrame);
 
     return energy;
 }
 
-int checkSpeech(paRecordData *recordedData, long frameIdx) {
+int checkSpeech(const paRecordData *recordedData, const long frameIdx) {
     static checkSpeechData prevSpeechData;
 
     int frameOffset = frameIdx - recordedData->startIdx;
@@ -98,7 +99,7 @@ int checkSpeech(paRecordData *recordedData, long frameIdx) {
     }
 
     float currentEnergy = frameEnergy(recordedData, frameIdx, SPEECH_FRAME_SPAN);
-    fprintf(stderr, "currentEnergy: %f\n", currentEnergy);
+    // fprintf(stderr, "currentEnergy: %f\n", currentEnergy);
     
     prevSpeechData.level = ((prevSpeechData.level * SPEECH_FORGET_FACTOR) + currentEnergy) / (float)(SPEECH_FORGET_FACTOR + 1);
     
@@ -157,7 +158,7 @@ int recordCallback( const void *inputBuffer, void *outputBuffer,
             } else {
                 consecutiveNoSpeech = 0;
             }
-            fprintf(stderr, "consecutiveNoSpeech: %d\n", consecutiveNoSpeech);
+            // fprintf(stderr, "consecutiveNoSpeech: %d\n", consecutiveNoSpeech);
 
             if (consecutiveNoSpeech > 150) {
                 fprintf(stderr, "Detected end-point at frame %d ... \n", data->endIdx);
@@ -219,7 +220,7 @@ void *writeThreadProc(void *ptr) {
         // write the recorded audio to file
         if (writeIdx > 0) {
             fwrite(writeBuf, sizeof(C_DATA_TYPE), writeIdx, fid);
-            fprintf(stderr, "Wrote %d bytes to 'recorded.raw'\n", writeIdx * sizeof(C_DATA_TYPE));
+            fprintf(stderr, "Wrote %d bytes to disk.\n", writeIdx * sizeof(C_DATA_TYPE));
         }
         if (finished) {
             fprintf(stderr, "We are finished.\n");
@@ -231,36 +232,24 @@ void *writeThreadProc(void *ptr) {
     pthread_exit(NULL);
 }
 
-int patestMain(void) {
+int patestMain(char *sphinxfe_bin) {
     PaError err;
-    PaStream *stream;
+    PaStream *stream = NULL;
     paRecordData data;
-    // int totalFrames;
-    int numSamples;
-    int totalBytes;
-    int i;
+    int numSamples = BUF_SECONDS * SAMPLE_RATE;
+    int totalBytes = 0;
+    int i = 0;
     PaStreamParameters inputParameters;
     int targetDevId = 0;
     float currEnergy = 0.0;
+    char recordFilename[32];
+    char wavFilename[32];
+    int recordIdx = 0;
     pthread_t writeThread;
     writeThreadData writeData;
-
-    FILE  *fid;
-    fid = fopen("recorded.raw", "ab");
-    if( fid == NULL )
-    {
-        fprintf(stderr, "Could not open file.\n");
-        return 3;
-    }
-
-    writeData.recordData = &data;
-    writeData.fid = fid;
+    FILE  *fid = NULL;
+    char cmdBuf[256];
     
-    data.startIdx = 0;
-    data.endIdx = 0;
-    data.bufLen = BUF_SECONDS * SAMPLE_RATE;
-    data.isRecording = 1;
-
     data.recordedSamples = (C_DATA_TYPE *) malloc (numSamples * sizeof(C_DATA_TYPE));
     for (i = 0; i < numSamples; i++) {
         data.recordedSamples[i] = 0;
@@ -278,12 +267,27 @@ int patestMain(void) {
     inputParameters.suggestedLatency = Pa_GetDeviceInfo( inputParameters.device )->defaultLowInputLatency;
     inputParameters.hostApiSpecificStreamInfo = NULL;
 
-
     while (1) {
         // enable "Hit-to-talk"
         printf("Press [Enter] to start recording ... \n");
         getchar();
 
+        // prepare filename
+        sprintf(recordFilename, "recorded_%d.raw", recordIdx);
+        
+        fid = fopen(recordFilename, "wb");
+        if(fid == NULL) {
+            fprintf(stderr, "Could not open file.\n");
+            return 3;
+        }
+
+        data.startIdx = 0;
+        data.endIdx = 0;
+        data.bufLen = numSamples;
+        data.isRecording = 1;
+
+        writeData.recordData = &data;
+        writeData.fid = fid;
 
         // Opens stream
         err = Pa_OpenStream(
@@ -291,7 +295,6 @@ int patestMain(void) {
                   &inputParameters,
                   NULL,                  /*  &outputParameters, */
                   SAMPLE_RATE,
-                  // FRAMES_PER_BUFFER,
                   paFramesPerBufferUnspecified, 
                   paClipOff,      /*  we won't output out of range samples so don't bother clipping them */
                   recordCallback,
@@ -302,35 +305,52 @@ int patestMain(void) {
         }
 
         // start the stream
-        err = Pa_StartStream( stream );
+        err = Pa_StartStream(stream);
+
+        if (err != paNoError) {
+            fprintf(stderr, "Error: %s\n", Pa_GetErrorText(err));
+        }
 
         fprintf(stderr, "\n=== Now recording!! Please speak into the microphone. ===\n"); fflush(stderr);
 
         // starts with write thread
         pthread_create(&writeThread, NULL, writeThreadProc, (void *) &writeData);
 
-        // actual recording
-        while (1) {
-            if (Pa_IsStreamActive(stream) != 1) {
-                fprintf(stderr, "Stream not active ... \n");
-                break;
-            }
+        if (Pa_IsStreamActive(stream) != 1) {
+            fprintf(stderr, "Stream not active ... \n");
+            break;
+        }
 
-            while((err = Pa_IsStreamActive(stream)) == 1)
-            {
-                Pa_Sleep(500);
-                fprintf(stderr, "startIdx = %d, endIdx = %d\n", data.startIdx, data.endIdx ); 
-                fflush(stderr);
-            }
+        // actual recording
+        while((err = Pa_IsStreamActive(stream)) == 1)
+        {
+            Pa_Sleep(500);
+            fprintf(stderr, "startIdx = %d, endIdx = %d\n", data.startIdx, data.endIdx ); 
+            fflush(stderr);
         }
 
         fprintf(stderr, "Waiting for write thread to join ... \n");
         pthread_join(writeThread, NULL);
         fprintf(stderr, "Write thread joined ... \n"); 
 
-        fclose( fid );
+        fclose(fid);
         err = Pa_StopStream(stream);
         err = Pa_CloseStream(stream);
+
+        // call program to do wave and MFCC conversion as needed
+
+        sprintf(wavFilename, "recorded_%d.wav", recordIdx);
+        fprintf(stderr, "Converting %s to wave format ... ", recordFilename);
+        // execl("/usr/bin/sox", "sox", "-t", "raw", "-b", "16", "-r", "16000", "-e", "signed-integer", "-c", "1", recordFilename, wavFilename, (char *)0);
+        sprintf(cmdBuf, "/usr/bin/sox -t raw -b 16 -r 16000 -e signed-integer -c 1 %s %s", recordFilename, wavFilename);
+        system(cmdBuf);
+        fprintf(stderr, "done.\n");
+
+        if (sphinxfe_bin != NULL) {
+            fprintf(stderr, "Computing MFCC features ... ");
+        }
+
+        recordIdx++;
     }
 
     free(data.recordedSamples);
@@ -339,6 +359,12 @@ int patestMain(void) {
 }
 
 int main(int argc, char** argv) {
+    char *sphinxfe_bin = NULL;
+    if (argc == 2) {
+        sphinxfe_bin = argv[1]; 
+        fprintf(stderr, "Using sphinx_fe binary from %s ... \n", sphinxfe_bin);
+    }
+
     pthread_mutex_init(&recordMutex, NULL);
 
     fprintf(stderr, "Initializing PortAudio ... \n");
@@ -352,7 +378,7 @@ int main(int argc, char** argv) {
     }
 
     // Here we go ... 
-    returnValue = patestMain();
+    returnValue = patestMain(sphinxfe_bin);
 
     err = Pa_Terminate();
     if (err == paNoError) {
