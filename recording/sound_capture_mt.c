@@ -8,8 +8,8 @@
 
 #define SAMPLE_RATE             (16000)
 #define FRAMES_PER_BUFFER       (512)
-#define BUF_SECONDS             (5)
-#define NUM_CHANNELS            (1)
+#define BUF_SECONDS             (20)
+#define NUM_CHANNELS            (3)
 #define SAMPLE_SILENCE          (0)
 #define C_DATA_TYPE             short
 #define PA_DATA_TYPE            paInt16
@@ -39,85 +39,6 @@ typedef struct {
 
 pthread_mutex_t recordMutex;
 
-float frameEnergy(const paRecordData *recordData, const long frameIdx, const int frameSpan) {
-    long startFrame;
-    long endFrame;
-    float energy;
-    long i;
-    
-    // calculates the energy starting frameIdx backwards
-    // startFrame = frameIdx - frameSpan;
-    // if (startFrame < 0) {
-    //     startFrame += recordData->bufLen;
-    //     if (startFrame < recordData->startIdx) {
-    //         startFrame = recordData->startIdx;
-    //     }
-    // }
-    startFrame = frameIdx - frameSpan;
-    if (startFrame < 0) {
-        startFrame = 0;
-    }
-    endFrame = frameIdx;
-    
-    energy = 0.0;
-    // for (i = startFrame; i < endFrame; i++) {
-    // while (startFrame != endFrame) {
-    //     energy += recordData->recordedSamples[startFrame] ^ 2;
-    //     startFrame = (startFrame + 1) % recordData->bufLen;
-    //     counter++;
-    // }
-    // energy = 10 * log10(energy) / (float)counter;
-
-    for (i = startFrame; i < endFrame; i++) {
-        energy += (recordData->recordedSamples[i] * recordData->recordedSamples[i]);
-    }
-    energy = sqrt(energy) / (float) (endFrame - startFrame);
-
-    return energy;
-}
-
-int checkSpeech(const paRecordData *recordedData, const long frameIdx) {
-    static checkSpeechData prevSpeechData;
-
-    int frameOffset = frameIdx - recordedData->startIdx;
-    if (frameOffset < 0) {
-        frameOffset += recordedData->bufLen;
-    }
-
-    // assume first several frames are speech
-    if (frameOffset < SPEECH_FRAME_SPAN - 1) {
-        // fprintf(stderr, "value: %d\n", recordedData->recordedSamples[frameIdx]);
-        return 1;
-    } else if (frameOffset == SPEECH_FRAME_SPAN - 1) {
-        prevSpeechData.background = frameEnergy(recordedData, frameIdx, SPEECH_FRAME_SPAN);
-        // prevSpeechData.level = prevSpeechData.background + 5;
-        prevSpeechData.level = recordedData->recordedSamples[frameIdx] * recordedData->recordedSamples[frameIdx];
-        // fprintf(stderr, "value: %d, frameIdx: %d, level: %f, background: %f, threshold: %f\n",\
-        //     recordedData->recordedSamples[frameIdx], frameIdx, prevSpeechData.level, prevSpeechData.background, SPEECH_THRESHOLD);
-
-        return 1;
-    }
-
-    float currentEnergy = frameEnergy(recordedData, frameIdx, SPEECH_FRAME_SPAN);
-    // fprintf(stderr, "currentEnergy: %f\n", currentEnergy);
-    
-    prevSpeechData.level = ((prevSpeechData.level * SPEECH_FORGET_FACTOR) + currentEnergy) / (float)(SPEECH_FORGET_FACTOR + 1);
-    
-    if (currentEnergy < prevSpeechData.background) {
-        prevSpeechData.background = currentEnergy;
-    } else {
-        prevSpeechData.background += (currentEnergy - prevSpeechData.background) * SPEECH_ADJUSTMENT;
-    }
-
-    if (prevSpeechData.level < prevSpeechData.background) {
-        prevSpeechData.level = prevSpeechData.background;
-    }
-    
-    // fprintf(stderr, "value: %d, frameIdx: %d, level: %f, background: %f, threshold: %f\n",\
-    //        recordedData->recordedSamples[frameIdx], frameIdx, prevSpeechData.level, prevSpeechData.background, SPEECH_THRESHOLD);
-    return (prevSpeechData.level - prevSpeechData.background > SPEECH_THRESHOLD);
-}
-
 int recordCallback( const void *inputBuffer, void *outputBuffer,
                            unsigned long framesPerBuffer,
                            const PaStreamCallbackTimeInfo* timeInfo,
@@ -135,6 +56,7 @@ int recordCallback( const void *inputBuffer, void *outputBuffer,
     long i;
     int finished;
     static int consecutiveNoSpeech = 0;
+    float currentEnergy;
 
     framesRecorded = 0;
     finished = paContinue;
@@ -153,23 +75,23 @@ int recordCallback( const void *inputBuffer, void *outputBuffer,
             data->endIdx = (data->endIdx + 1) % data->bufLen;
             framesRecorded++;
 
-            /*  
-            if (!checkSpeech(data, data->endIdx - 1)) {
+            // if (!checkSpeech(data, data->endIdx - 1)) {
+            currentEnergy = sqrt(data->recordedSamples[data->endIdx - 1] * data->recordedSamples[data->endIdx - 1]);
+
+            if (currentEnergy < 1000) { 
                 consecutiveNoSpeech++;
             } else {
                 consecutiveNoSpeech = 0;
             }
-            */
             // fprintf(stderr, "consecutiveNoSpeech: %d\n", consecutiveNoSpeech);
 
-            /* 
-            if (consecutiveNoSpeech > 150 && 0) {
+            if (consecutiveNoSpeech > 1000) {
                 fprintf(stderr, "Detected end-point at frame %d ... \n", data->endIdx);
                 data->isRecording = 0;
+                consecutiveNoSpeech = 0;
                 // finished = paComplete;
                 break;
             }
-            */
         }
     }
     if (!data->isRecording) {
@@ -251,6 +173,7 @@ int patestMain(char *sphinxfe_bin) {
     float currEnergy = 0.0;
     char recordFilename[32];
     char wavFilename[32];
+    char mfccFilename[32];
     int recordIdx = 0;
     pthread_t writeThread;
     writeThreadData writeData;
@@ -337,13 +260,13 @@ int patestMain(char *sphinxfe_bin) {
             fprintf(stderr, "startIdx = %d, endIdx = %d, second: %d\n", data.startIdx, data.endIdx, secondsRecorded); 
             fflush(stderr);
               
-            if (secondsRecorded > 10) {
-                pthread_mutex_lock(&recordMutex);
-                data.isRecording = 0;
-                pthread_mutex_unlock(&recordMutex);
-            }
+            // if (secondsRecorded > 30) {
+            //     pthread_mutex_lock(&recordMutex);
+            //     data.isRecording = 0;
+            //     pthread_mutex_unlock(&recordMutex);
+            // }
 
-            secondsRecorded++;
+            // secondsRecorded++;
         }
 
         fprintf(stderr, "Waiting for write thread to join ... \n");
@@ -358,13 +281,15 @@ int patestMain(char *sphinxfe_bin) {
 
         sprintf(wavFilename, "recorded_%d.wav", recordIdx);
         fprintf(stderr, "Converting %s to wave format ... ", recordFilename);
-        // execl("/usr/bin/sox", "sox", "-t", "raw", "-b", "16", "-r", "16000", "-e", "signed-integer", "-c", "1", recordFilename, wavFilename, (char *)0);
         sprintf(cmdBuf, "/usr/bin/sox -t raw -b 16 -r 16000 -e signed-integer -c 1 %s %s", recordFilename, wavFilename);
         system(cmdBuf);
         fprintf(stderr, "done.\n");
 
         if (sphinxfe_bin != NULL) {
             fprintf(stderr, "Computing MFCC features ... ");
+            sprintf(cmdBuf, "%s -i recorded_%d.wav -o recorded_%d.mfcc -mswav yes", sphinxfe_bin, recordIdx, recordIdx);
+            system(cmdBuf);
+            fprintf(stderr, "done.\n");
         }
 
         recordIdx++;
