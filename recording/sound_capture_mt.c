@@ -161,7 +161,7 @@ void *writeThreadProc(void *ptr) {
     pthread_exit(NULL);
 }
 
-int patestMain(char *sphinxfe_bin) {
+int recordAudio(char *sphinxfe_bin) {
     PaError err;
     PaStream *stream = NULL;
     paRecordData data;
@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
     }
 
     // Here we go ... 
-    returnValue = patestMain(sphinxfe_bin);
+    returnValue = recordAudio(sphinxfe_bin);
 
     err = Pa_Terminate();
     if (err == paNoError) {

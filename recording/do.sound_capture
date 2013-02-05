@@ -2,4 +2,4 @@
 rm recorded_*.raw
 rm recorded_*.wav
 
-./sound_capture_mt
+./sound_capture_mt ./sphinx_fe
