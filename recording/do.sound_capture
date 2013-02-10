@@ -1,5 +1,10 @@
 #!/bin/bash
 rm recorded_*.raw
 rm recorded_*.wav
+rm recorded_*.mfcc
 
-./sound_capture_mt ./sphinx_fe
+if [ -z $1 ]; then
+    ./sound_capture_mt --sphinx-bin ./sphinx_fe
+else
+    ./sound_capture_mt --sphinx-bin ./sphinx_fe --threshold $1
+fi

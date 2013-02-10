@@ -8,8 +8,8 @@
 
 #define SAMPLE_RATE             (16000)
 #define FRAMES_PER_BUFFER       (512)
-#define BUF_SECONDS             (20)
-#define NUM_CHANNELS            (3)
+#define BUF_SECONDS             (10)
+#define NUM_CHANNELS            (1)
 #define SAMPLE_SILENCE          (0)
 #define C_DATA_TYPE             short
 #define PA_DATA_TYPE            paInt16
@@ -38,6 +38,7 @@ typedef struct {
 } checkSpeechData;
 
 pthread_mutex_t recordMutex;
+int energyThreshold;
 
 int recordCallback( const void *inputBuffer, void *outputBuffer,
                            unsigned long framesPerBuffer,
@@ -67,7 +68,6 @@ int recordCallback( const void *inputBuffer, void *outputBuffer,
             data->endIdx = (data->endIdx + 1) % data->bufLen;
             framesRecorded++;
         }
-        // finished = paComplete;
         data->isRecording = 0;
     } else {
         while (framesRecorded < framesPerBuffer && (data->endIdx + 1) % data->bufLen != data->startIdx) {
@@ -75,17 +75,16 @@ int recordCallback( const void *inputBuffer, void *outputBuffer,
             data->endIdx = (data->endIdx + 1) % data->bufLen;
             framesRecorded++;
 
-            // if (!checkSpeech(data, data->endIdx - 1)) {
-            currentEnergy = sqrt(data->recordedSamples[data->endIdx - 1] * data->recordedSamples[data->endIdx - 1]);
+            currentEnergy = abs(data->recordedSamples[data->endIdx - 1]);
 
-            if (currentEnergy < 1000) { 
+            if (currentEnergy < energyThreshold) { 
                 consecutiveNoSpeech++;
             } else {
                 consecutiveNoSpeech = 0;
             }
             // fprintf(stderr, "consecutiveNoSpeech: %d\n", consecutiveNoSpeech);
 
-            if (consecutiveNoSpeech > 1000) {
+            if (consecutiveNoSpeech > 800) {
                 fprintf(stderr, "Detected end-point at frame %d ... \n", data->endIdx);
                 data->isRecording = 0;
                 consecutiveNoSpeech = 0;
@@ -156,12 +155,12 @@ void *writeThreadProc(void *ptr) {
             break;
         }
         // usleep(1500000);
-        sleep(1);
+        sleep(2);
     }
     pthread_exit(NULL);
 }
 
-int recordAudio(char *sphinxfe_bin) {
+int recordAudio(char *sphinxfe_bin, int energyThreshold) {
     PaError err;
     PaStream *stream = NULL;
     paRecordData data;
@@ -300,12 +299,44 @@ int recordAudio(char *sphinxfe_bin) {
     return 0;
 }
 
+void printUsage() {
+    fprintf(stderr, "Usage: ./sound_capture_mt --sphinx-bin ./sphinx_fe --threshold 1500\n");
+}
+
 int main(int argc, char** argv) {
     char *sphinxfe_bin = NULL;
-    if (argc == 2) {
-        sphinxfe_bin = argv[1]; 
-        fprintf(stderr, "Using sphinx_fe binary from %s ... \n", sphinxfe_bin);
+    energyThreshold = 1400;
+    int i;
+   
+    i = 1;
+    while (i < argc) {
+        if (!strcmp(argv[i], "--sphinx-bin")) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Must specify sphinx_fe's location.\n");
+                printUsage();
+                return 4;
+            }
+            sphinxfe_bin = argv[i + 1];
+            fprintf(stderr, "Using sphinx_fe binary from %s ... \n", sphinxfe_bin);
+            i += 2;
+        } else if (!strcmp(argv[i], "--threshold")) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Must specify the threshold.\n");
+                printUsage();
+                return 5;
+            }
+            energyThreshold = atoi(argv[i + 1]);
+            i += 2;
+        } else if (!strcmp(argv[i], "--help")) {
+            printUsage();
+            return 0;
+        } else {
+            fprintf(stderr, "Invalid argument: %s\n", argv[i]);
+            printUsage();
+            return 6;
+        }
     }
+    fprintf(stderr, "Using threshold: %d\n", energyThreshold);
 
     pthread_mutex_init(&recordMutex, NULL);
 
@@ -320,7 +351,7 @@ int main(int argc, char** argv) {
     }
 
     // Here we go ... 
-    returnValue = recordAudio(sphinxfe_bin);
+    returnValue = recordAudio(sphinxfe_bin, energyThreshold);
 
     err = Pa_Terminate();
     if (err == paNoError) {
