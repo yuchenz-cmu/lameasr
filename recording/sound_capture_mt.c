@@ -84,7 +84,7 @@ int recordCallback( const void *inputBuffer, void *outputBuffer,
             }
             // fprintf(stderr, "consecutiveNoSpeech: %d\n", consecutiveNoSpeech);
 
-            if (consecutiveNoSpeech > 800) {
+            if (consecutiveNoSpeech > 1100) {
                 fprintf(stderr, "Detected end-point at frame %d ... \n", data->endIdx);
                 data->isRecording = 0;
                 consecutiveNoSpeech = 0;
@@ -160,7 +160,7 @@ void *writeThreadProc(void *ptr) {
     pthread_exit(NULL);
 }
 
-int recordAudio(char *sphinxfe_bin, int energyThreshold) {
+int recordAudio(char *sphinxfe_bin, char *sphinxcepview_bin, int energyThreshold) {
     PaError err;
     PaStream *stream = NULL;
     paRecordData data;
@@ -288,6 +288,15 @@ int recordAudio(char *sphinxfe_bin, int energyThreshold) {
             fprintf(stderr, "Computing MFCC features ... ");
             sprintf(cmdBuf, "%s -i recorded_%d.wav -o recorded_%d.mfcc -mswav yes", sphinxfe_bin, recordIdx, recordIdx);
             system(cmdBuf);
+            sprintf(cmdBuf, "%s -f recorded_%d.mfcc -d 13 | sed \"s/^ *//;s/ *$//;s/  */ /g\" > recorded_%d.mfcc.visual", sphinxcepview_bin, recordIdx, recordIdx);
+            system(cmdBuf);
+            fprintf(stderr, "done.\n");
+
+            fprintf(stderr, "Computing Logspec features ... ");
+            sprintf(cmdBuf, "%s -mswav yes -i recorded_%d.wav -o recorded_%d.logspec -logspec yes", sphinxfe_bin, recordIdx, recordIdx);
+            system(cmdBuf);
+            sprintf(cmdBuf, "%s -f recorded_%d.logspec -d 40 -i 40 | sed \"s/^ *//;s/ *$//;s/  */ /g\" > recorded_%d.logspec.visual", sphinxcepview_bin, recordIdx, recordIdx);
+            system(cmdBuf);
             fprintf(stderr, "done.\n");
         }
 
@@ -305,20 +314,22 @@ void printUsage() {
 
 int main(int argc, char** argv) {
     char *sphinxfe_bin = NULL;
+    char *sphinxcepview_bin = NULL;
     energyThreshold = 1400;
     int i;
    
     i = 1;
     while (i < argc) {
         if (!strcmp(argv[i], "--sphinx-bin")) {
-            if (i + 1 >= argc) {
+            if (i + 2 >= argc) {
                 fprintf(stderr, "Must specify sphinx_fe's location.\n");
                 printUsage();
                 return 4;
             }
             sphinxfe_bin = argv[i + 1];
-            fprintf(stderr, "Using sphinx_fe binary from %s ... \n", sphinxfe_bin);
-            i += 2;
+            sphinxcepview_bin = argv[i + 2];
+            fprintf(stderr, "Using sphinx_fe binary from %s, %s ... \n", sphinxfe_bin, sphinxcepview_bin);
+            i += 3;
         } else if (!strcmp(argv[i], "--threshold")) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Must specify the threshold.\n");
@@ -351,7 +362,7 @@ int main(int argc, char** argv) {
     }
 
     // Here we go ... 
-    returnValue = recordAudio(sphinxfe_bin, energyThreshold);
+    returnValue = recordAudio(sphinxfe_bin, sphinxcepview_bin, energyThreshold);
 
     err = Pa_Terminate();
     if (err == paNoError) {
