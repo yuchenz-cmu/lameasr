@@ -23,6 +23,7 @@
 #include "gmm.h"
 
 #define PI (3.14159265358)
+#define LN_2PI (1.837877066)
 #define LINE_BUF_SIZE (256)
 
 void gmm_clear(GMM *gmm) {
@@ -42,25 +43,20 @@ void gmm_clear(GMM *gmm) {
  * */
 void gmm_var_const(GMM *gmm) {
     // compute the variance constant
-    gmm->var_const = -gmm->feat_dim * 0.5 * log(PI);
+    gmm->var_const = -0.5 * gmm->feat_dim * LN_2PI;
     float tmp = 0.0;
     for (int d = 0; d < gmm->feat_dim; d++) {
         tmp += log(gmm->var[0][d]);
     }
-    gmm->var_const -= 0.5 * tmp;
+    gmm->var_const += -0.5 * tmp;
 }
 
 /* 
  * Currently only deal with the case of mixture_num == 1
  * */
-int gmm_mean_var(GMM *gmm, float **feat, int feat_size, int feat_dim, int accumulate) {
+int gmm_mean_var(GMM *gmm, float **feat, int feat_size, int feat_dim) {
     assert (gmm->mixture_num == 1);
     assert (gmm->feat_dim == feat_dim);
-
-    // clear the numbers in the gmm
-    if (!accumulate) {
-        gmm_clear(gmm);
-    }
 
     float prev_ratio = (float) gmm->feat_count / (float) (gmm->feat_count + feat_size);
     float curr_ratio = (float) feat_size / (float) (gmm->feat_count + feat_size);
@@ -102,11 +98,29 @@ float gmm_likelihood(GMM *gmm, float *feat, int feat_dim) {
     assert (gmm->mixture_num == 1);
     assert (gmm->feat_dim == feat_dim);
 
-    float ll = 0.0;
+    // for (int d = 0; d < feat_dim; d++) {
+    //     fprintf(stderr, "%.4f ", feat[d]);
+    // }
+    // fprintf(stderr, "\n");
+
+    // float ll = 0.0;
+    float ll = -0.5 * feat_dim * LN_2PI;
+    float tmp = 0.0;
+    // fprintf(stderr, "ll: %f\n", ll);
+
     for (int d = 0; d < feat_dim; d++) {
-        ll += (feat[d] - gmm->mean[0][d]) * (feat[d] - gmm->mean[0][d]) / (float) (2 * gmm->var[0][d]);
+        tmp += log(gmm->var[0][d]);
+        // fprintf(stderr, "tmp: %f\n", tmp);
     }
-    return (gmm->var_const - ll);
+    ll += -0.5 * tmp;
+    // fprintf(stderr, "ll: %f\n", ll);
+
+    for (int d = 0; d < feat_dim; d++) {
+        ll -= (feat[d] - gmm->mean[0][d]) * (feat[d] - gmm->mean[0][d]) / (float) (2 * gmm->var[0][d]);
+    }
+    // fprintf(stderr, "ll: %f\n", ll);
+    // return (gmm->var_const + ll);
+    return ll;
 }
 
 /*  
