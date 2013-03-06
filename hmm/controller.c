@@ -82,6 +82,7 @@ int main(int argc, char **argv) {
     }
 
     // do training
+    printf("Reading features ... \n");
     FILE *ftrain_list = fopen(train_file, "r");
     while (fgets(line_buf, BUF_LEN, ftrain_list) != NULL) {
         line_buf[strlen(line_buf) - 1] = 0;
@@ -94,6 +95,7 @@ int main(int argc, char **argv) {
     }
     fclose(ftrain_list);
 
+    printf("Training ... \n");
     for (int i = 0; i < 10; i++) {
         // hmm_train_kmeans(models[0], fs_train_one, 50, 0.001);
         fprintf(stderr, "Training %d ... \n", i);
@@ -119,7 +121,6 @@ int main(int argc, char **argv) {
         int feat_idx = fs_test->feat_num - 1;
         max_prob_idx = -1;
         max_prob = -FLT_MAX;
-        // float model_three_ll = hmm_align_dtw(models[2], fs_test->feat[0], fs_test->feat_sizes[0], fs_test->feat_dim, align);
         int *align = (int *) malloc(sizeof(int) * fs_test->feat_sizes[feat_idx]);
 
         for (int i = 0; i < 10; i++) {
@@ -133,6 +134,28 @@ int main(int argc, char **argv) {
         free(align);
         fprintf(stdout, "%s: %s\n", curr_num, num2str[max_prob_idx]);
     }
+    fclose(ftest_list);
+
+
+    // single test
+    printf("\nSingle test :\n");
+    featset_read_file("recorded_0.mfcc.visual", fs_test);
+
+    int feat_idx =fs_test->feat_num - 1;
+    max_prob_idx = -1;
+    max_prob = -FLT_MAX;
+    curr_num = "eight";
+    int *align = (int *) malloc(sizeof(int) * fs_test->feat_sizes[feat_idx]);
+
+    for (int i = 0; i < 10; i++) {
+        curr_prob = hmm_align_dtw(models[i], fs_test->feat[feat_idx], fs_test->feat_sizes[feat_idx], feat_dim, align);
+        if (curr_prob > max_prob) {
+            max_prob = curr_prob;
+            max_prob_idx = i;
+        }
+    }
+    free(align);
+    fprintf(stdout, "%s: %s\n", curr_num, num2str[max_prob_idx]);
 
     return 0;
 }
