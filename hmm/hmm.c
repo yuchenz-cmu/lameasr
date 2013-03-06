@@ -19,9 +19,13 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <float.h>
+#include <math.h>
 #include "gmm.h"
 #include "hmm.h"
 #include "feat.h"
+#include "utils.h"
+
+#define MAX_GAUSSIANS (4)
 
 /*  
  * Fills the align array with equal alignment, assume align is of length feat_size
@@ -116,7 +120,7 @@ float hmm_align_dtw(HMM* hmm, float **feat, int feat_size, int feat_dim, int *al
 /* 
  * Initialize HMM, all of its states, and each state's GMM
  * */
-HMM *hmm_init(int state_num, int feat_dim, char *lex) {
+HMM *hmm_init(int state_num, int gs_num, int feat_dim, char *lex) {
     // initialize HMM
     HMM *hmm = (HMM *) malloc(sizeof(HMM));
 
@@ -127,7 +131,7 @@ HMM *hmm_init(int state_num, int feat_dim, char *lex) {
     // initialize GMM for each state
     for (int s = 0; s < state_num; s++) {
         hmm->states[s].id = s; 
-        hmm->states[s].gmm = gmm_init(1, feat_dim);
+        hmm->states[s].gmm = gmm_init(gs_num, feat_dim);
     }
     hmm->lex = lex;
 
@@ -144,6 +148,7 @@ void hmm_clear_gmm(HMM *hmm) {
  * Given an HMM, a set of frames, and an alignment of which state each frame is in, 
  * update the corresponding GMM's parameters
  * */
+/* 
 void hmm_update_gmm(HMM *hmm, float **feat, int feat_size, int feat_dim, int *alignment) {
     assert(hmm->state_num > 0);
     assert(hmm->states[0].gmm->feat_dim == feat_dim);
@@ -161,12 +166,148 @@ void hmm_update_gmm(HMM *hmm, float **feat, int feat_size, int feat_dim, int *al
         }
     }
 }
+*/
+
+/* 
+ * Given an HMM, a FeatureSet, and a set of alignment of being at which state at time t, 
+ * update the GMM's parameters
+ * */
+void hmm_update_gmm(HMM *hmm, FeatureSet *fs, int **alignset) {
+    assert (hmm->state_num > 0);
+
+    float *acc_gamma = NULL;
+    float **acc_mean = NULL;
+    float **acc_var = NULL;
+    float *gs_gammas = NULL;
+    float gammaD = 0.0;
+    int mixture_num = 0;
+    float **curr_feat = NULL;
+    int curr_feat_size = 0;
+
+    for (int s = 0; s < hmm->state_num; s++) {
+        fprintf(stderr, "Training state %d ... \n", s);
+        // initialize all accumulators
+        mixture_num = hmm->states[s].gmm->mixture_num;
+        acc_gamma = (float *) malloc(sizeof(float) * mixture_num);
+        gs_gammas = (float *) malloc(sizeof(float) * mixture_num);
+        acc_mean = (float **) malloc(sizeof(float *) * mixture_num);
+        acc_var = (float **) malloc(sizeof(float *) * mixture_num);
+        for (int g = 0; g < mixture_num; g++) {
+            acc_mean[g] = (float *) malloc(sizeof(float) * fs->feat_dim);
+            acc_var[g] = (float *) malloc(sizeof(float) * fs->feat_dim);
+        }
+        gammaD = 0.0;
+
+        // set to zero
+        for (int g = 0; g < mixture_num; g++) {
+            acc_gamma[g] = 0.0;
+            gs_gammas[g] = 0.0;
+            for (int d = 0; d < fs->feat_dim; d++) {
+                acc_mean[g][d] = 0.0;
+                acc_var[g][d] = 0.0;
+            }
+        }
+
+        // for every utterance
+        for (int idx = 0; idx < fs->feat_num; idx++) {
+            curr_feat = fs->feat[idx];
+            curr_feat_size = fs->feat_sizes[idx];
+            // for every frame
+            for (int t = 0; t < curr_feat_size; t++) {
+                // only update the frames assigned to the state s
+                if (alignset[idx][t] != s) {
+                    continue;
+                }
+
+                gammaD = 0.0;
+                // for every gaussian
+                // fprintf(stderr, "gs_gammas[g]: ");
+                for (int g = 0; g < mixture_num; g++) {
+                    gs_gammas[g] = exp(gmm_likelihood_idx(hmm->states[s].gmm, g, curr_feat[t], fs->feat_dim)) * hmm->states[s].gmm->weight[g];
+                    gammaD += gs_gammas[g];
+                    // fprintf(stderr, "%f ", gs_gammas[g]);
+                }
+                // fprintf(stderr, "\n");
+                // fprintf(stderr, "gammaD: %f\n", gammaD);
+
+                // for every gaussian
+                // fprintf(stderr, "curr_gamma: ");
+                for (int g = 0; g < mixture_num; g++) {
+                    float curr_gamma = (float) gs_gammas[g] / (float) gammaD;
+                    // fprintf(stderr, "%f ", curr_gamma);
+                    acc_gamma[g] += curr_gamma;
+                    for (int d = 0; d < fs->feat_dim; d++) {
+                        acc_mean[g][d] += curr_gamma * curr_feat[t][d];
+                        acc_var[g][d] += curr_gamma * curr_feat[t][d] * curr_feat[t][d];
+                    }
+                }
+                // fprintf(stderr, "\n");
+            }
+
+        }
+        // for every gaussian, update mean, var and weight
+        float all_gammas = 0.0;
+        for (int g = 0; g < mixture_num; g++) {
+            all_gammas += acc_gamma[g];
+        }
+
+        for (int g = 0; g < mixture_num; g++) {
+            // fprintf(stderr, "mean: ");
+            for (int d = 0; d < fs->feat_dim; d++) {
+                float new_mean = (float) acc_mean[g][d] / (float) acc_gamma[g];
+                hmm->states[s].gmm->mean[g][d] = new_mean;
+                hmm->states[s].gmm->var[g][d] = (float) acc_var[g][d] / (float) acc_gamma[g] - new_mean * new_mean;
+                // fprintf(stderr, "%f ", hmm->states[s].gmm->mean[g][d]);
+            }
+            // fprintf(stderr, "\n");
+            hmm->states[s].gmm->weight[g] = (float) acc_gamma[g] / (float) all_gammas;
+        }
+
+        // free up memory
+        for (int g = 0; g < mixture_num; g++) {
+            free(acc_mean[g]);
+            free(acc_var[g]);
+        }
+        free(acc_mean);
+        free(acc_var);
+        free(acc_gamma);
+        free(gs_gammas);
+        acc_mean = NULL;
+        acc_var = NULL;
+        acc_gamma = NULL;
+        gs_gammas = NULL;
+    }
+}
 
 /* 
  * Given a FeatureSet, an HMM, updates the HMM GMM's parameters iteratively
  * (First iteration is divided equally, the rest uses DTW alignment)
  * */
 void hmm_train_kmeans(HMM *hmm, FeatureSet *fs, int max_iter, float tolerance) {
+    assert (fs->feat_num > 0);
+
+    // clears the GMMs and set global mean, var and equal weight
+    hmm_clear_gmm(hmm); 
+    for (int s = 0; s < hmm->state_num; s++) {
+        gmm_mean_var(hmm->states[s].gmm, fs->feat[0], fs->feat_sizes[0], fs->feat_dim);
+        /* 
+        for (int g = 0; g < hmm->states[s].gmm->mixture_num; g++) {
+            for (int d = 0; d < fs->feat_dim; d++) {
+                hmm->states[s].gmm->mean[g][d] = rand() / (float) RAND_MAX;
+                hmm->states[s].gmm->var[g][d] = rand() / (float) RAND_MAX;
+            }
+            hmm->states[s].gmm->weight[g] = rand() / (float) RAND_MAX;
+        }
+
+        gmm_normalize_weight(hmm->states[s].gmm);
+        */ 
+        
+        float eq_wght = 1.0 / (float) hmm->states[s].gmm->mixture_num;
+        for (int g = 0; g < hmm->states[s].gmm->mixture_num; g++) {
+            hmm->states[s].gmm->weight[g] = eq_wght;
+        }
+    }
+
     // create the alignment tables 
     int **alignset = (int **) malloc(sizeof(int *) * fs->feat_num);
     for (int idx = 0; idx < fs->feat_num; idx++) {
@@ -181,17 +322,38 @@ void hmm_train_kmeans(HMM *hmm, FeatureSet *fs, int max_iter, float tolerance) {
     float bestpath_ll = 0.0;
     float curr_ll = 0.0;
     int iter = 0;
+    int curr_gs_num = 1;
 
     while (iter < max_iter) {
+
+        // splitting gaussians
+        if (iter % 4 == 3 && curr_gs_num < MAX_GAUSSIANS) {
+        // if (0) {
+            fprintf(stderr, "Splitting gaussians ... \n");
+            for (int s = 0; s < hmm->state_num; s++) {
+                gmm_split_max_var(hmm->states[s].gmm);
+            }
+            float avg_ll = -FLT_MAX;
+            curr_gs_num++;
+        }
+
         fprintf(stderr, "Iteration: %d\n", iter);
+        fprintf(stderr, "weights: ");
+        for (int g = 0; g < hmm->states[0].gmm->mixture_num; g++) {
+            fprintf(stderr, "%f ", hmm->states[0].gmm->weight[g]);
+        }
+        fprintf(stderr, "\n");
 
         // clears the hmm
-        hmm_clear_gmm(hmm);
+        // hmm_clear_gmm(hmm);
 
         // update the model
+        /* 
         for (int idx = 0; idx < fs->feat_num; idx++) {
             hmm_update_gmm(hmm, fs->feat[idx], fs->feat_sizes[idx], fs->feat_dim, alignset[idx]);
         }
+        */ 
+        hmm_update_gmm(hmm, fs, alignset);
 
         // compute the alignment
         for (int idx = 0; idx < fs->feat_num; idx++) {

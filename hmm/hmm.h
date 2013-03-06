@@ -28,7 +28,7 @@ typedef struct struct_hmm {
 } HMM;
 
 float hmm_align_dtw(HMM* hmm, float **feat, int feat_size, int feat_dim, int *align);
-HMM *hmm_init(int state_num, int feat_dim, char *lex);
+HMM *hmm_init(int state_num, int gs_num, int feat_dim, char *lex);
 void hmm_update_gmm();
 void hmm_clear_gmm(HMM *hmm);
 void hmm_align_equal(int feat_size, int slice, int *align);
