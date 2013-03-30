@@ -1,4 +1,4 @@
-all: controller
+all: hmm
 
 controller: controller.o feat.o gmm.o hmm.o utils.o
 	gcc feat.o gmm.o controller.o hmm.o utils.o -o controller -lm
@@ -18,8 +18,8 @@ feat.o: feat.c
 feat: feat.o
 	gcc feat.o -o feat
 
-hmm: hmm.o gmm.o utils.o
-	gcc hmm.o gmm.o utils.o -o hmm -lm
+hmm: hmm.o gmm.o utils.o feat.o
+	gcc hmm.o gmm.o utils.o feat.o -o hmm -lm
 
 hmm.o: hmm.c
 	gcc -g -std=c99 -c hmm.c -o hmm.o
