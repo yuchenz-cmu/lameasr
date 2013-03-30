@@ -1,17 +1,17 @@
 /*
  * =====================================================================================
  *
- *       Filename:  feat.c
+ *       Filename:  feat.cpp
  *
- *    Description:  
+ *    Description:
  *
  *        Version:  1.0
  *        Created:  03/02/2013 05:41:04 PM
  *       Revision:  none
  *       Compiler:  gcc
  *
- *         Author:  YOUR NAME (), 
- *   Organization:  
+ *         Author:  YOUR NAME (),
+ *   Organization:
  *
  * =====================================================================================
  */
@@ -24,7 +24,7 @@
 #define INIT_CAPACITY 32
 #define LINE_BUF_SIZE (256)
 
-/*  
+/*
  * Grow the feature by twice
  * */
 int featset_feat_grow(float ***feat, int feat_size, int feat_dim) {
@@ -44,12 +44,12 @@ int featset_feat_grow(float ***feat, int feat_size, int feat_dim) {
     return curr_size;
 }
 
-/*  
+/*
  * Grow the FeatureSet by one feature. (a feature is a two-dimensional array)
  * */
 int featset_grow(FeatureSet *fs) {
     // prepare the empty feature
-    float **feat = (float **) malloc(sizeof(float *) * INIT_CAPACITY); 
+    float **feat = (float **) malloc(sizeof(float *) * INIT_CAPACITY);
     for (int i = 0; i < INIT_CAPACITY; i++) {
         feat[i] = (float *) malloc(sizeof(float) * fs->feat_dim);
     }
@@ -57,7 +57,7 @@ int featset_grow(FeatureSet *fs) {
     // grow the FeatureSet
     float ***new_feat = (float ***) malloc(sizeof(float **) * (fs->feat_num + 1));
     for (int idx = 0; idx < fs->feat_num; idx++) {
-        new_feat[idx] = (float **) malloc(sizeof(float *) * (fs->feat_sizes[idx])); 
+        new_feat[idx] = (float **) malloc(sizeof(float *) * (fs->feat_sizes[idx]));
         for (int i = 0; i < fs->feat_sizes[idx]; i++) {
             new_feat[idx][i] = malloc(sizeof(float) * fs->feat_dim);
         }
@@ -81,7 +81,7 @@ int featset_grow(FeatureSet *fs) {
         free(fs->feat);
         free(fs->feat_sizes);
     }
-    
+
     // put new feature in
     fs->feat = new_feat;
     fs->feat_sizes = new_feat_sizes;
@@ -101,7 +101,7 @@ FeatureSet *featset_init(int feat_dim) {
     return fs;
 }
 
-/*  
+/*
  * Reads the features from file, returns the number of feature vectores read.
  * */
 int featset_read_file(char *filename, FeatureSet *fs) {
@@ -120,7 +120,7 @@ int featset_read_file(char *filename, FeatureSet *fs) {
         if (feat_size == curr_capacity) {
             // grow
             fprintf(stderr, "Growing from %d to %d ... \n", curr_capacity, curr_capacity * 2);
-            curr_capacity = featset_feat_grow(curr_feat, feat_size, fs->feat_dim);          
+            curr_capacity = featset_feat_grow(curr_feat, feat_size, fs->feat_dim);
         }
 
         one_feat = strtok(buf, " ");
