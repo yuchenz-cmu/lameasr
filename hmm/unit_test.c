@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <float.h>
+#include "uthash.h"
 
 void gen(float ***matrix) {
     int w = 10;
@@ -35,22 +36,21 @@ void gen(float ***matrix) {
     *matrix = grid;
 }
 
-int main(int argc, char **argv) {
-    int w = 10;
-    int h = 20;
-    // float **my_matrix = (float **) malloc(sizeof(float *));
-    float **my_matrix = NULL;
-    
-    printf("dddd\n");
-    gen(&my_matrix);
-    printf("asdf\n");
+typedef struct struct_lex_hmm_hash {
+    char *lex;
+    int hmm_id;
+    UT_hash_handle hh;
+} LexHmmHash;
 
-    for (int i = 0; i < w; i++) {
-        for (int j = 0; j < h; j++) {
-            printf("%.1f ", my_matrix[i][j]);
-        }
-        printf("\n");
-    }
+int main(int argc, char **argv) {
+    LexHmmHash *lex_hmm_dict = NULL;
+    LexHmmHash hash_item;
+
+    hash_item.lex = "one";
+    hash_item.hmm_id = 1;
+    HASH_ADD_STR(lex_hmm_dict, lex, &hash_item);
+
+    HASH_FIND_STR(lex_hmm_dict, hash_item.lex, 
 }
 
 /*  

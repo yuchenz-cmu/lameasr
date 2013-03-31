@@ -68,6 +68,7 @@ int main(int argc, char **argv) {
     char *curr_num = NULL;
     int curr_num_int;
     char *curr_feat_file = NULL;
+    char fname_buf[256];
 
     fprintf(stderr, "Feature dimension: %d\n", feat_dim);
 
@@ -99,7 +100,9 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 10; i++) {
         // hmm_train_kmeans(models[0], fs_train_one, 50, 0.001);
         fprintf(stderr, "Training %d ... \n", i);
+        sprintf(fname_buf, "models/%s.hmm", num2str[i]);
         hmm_train_kmeans(models[i], fs_train[i], 50, 0.001);
+        hmm_write(models[i], fname_buf);
     }
 
     // do testing

@@ -59,9 +59,4 @@ int hmm_write(HMM *hmm, char *filename);
  */
 HMM* hmm_read(char *filename);
 
-/*  
- * Given a set of HMMs, assign a unique id for every state in every HMM
- * */
-void hmm_assign_stateid(HMM **hmm_set, int hmm_size);
-
 #endif

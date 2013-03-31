@@ -18,14 +18,20 @@ feat.o: feat.c
 feat: feat.o
 	gcc feat.o -o feat
 
-hmm: hmm.o gmm.o utils.o feat.o
-	gcc hmm.o gmm.o utils.o feat.o -o hmm -lm
+hmm: hmm.o gmm.o utils.o feat.o topo.o
+	gcc hmm.o gmm.o utils.o feat.o topo.o -o hmm -lm
 
 hmm.o: hmm.c
 	gcc -g -std=c99 -c hmm.c -o hmm.o
 
 utils.o: utils.c
 	gcc -g -std=c99 -c utils.c -o utils.o
+
+topo: topo.o
+	gcc topo.o -o topo
+
+topo.o: topo.c
+	gcc -g -std=c99 -c topo.c -o topo.o
 
 clean: 
 	-rm gmm.o

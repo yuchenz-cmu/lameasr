@@ -25,6 +25,7 @@
 #include "hmm.h"
 #include "feat.h"
 #include "utils.h"
+#include "topo.h"
 
 #define MAX_GAUSSIANS (4)
 
@@ -34,6 +35,12 @@ void hmm_align_equal(int feat_size, int slice, int *align) {
     for (int t = 0; t < feat_size; t++) {
         align[t] = t / slice_len;
     }
+}
+
+float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, FeatureStruct *feat_struct) {
+    assert (hmm_size > 0);
+
+    
 }
 
 float hmm_align_dtw(HMM* hmm, float **feat, int feat_size, int feat_dim, int *align) {
@@ -542,28 +549,53 @@ HMM* hmm_read(char *filename) {
     return hmm;
 }
 
-/* 
 int main(int argc, char **argv) {
-
-    HMM *hmm = hmm_init(5, 4, 13, "nine");
     char fname[256];
+    char *num2str[] = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
+    HMM **hmm_set = malloc(sizeof(HMM *) * 10);
+    float **trans_matrix = NULL;
+    int *state_mapping = NULL;
+    int total_states = 0;
+    int nodes_num = 0;
 
-    // prepare the feature
-    FeatureSet *fs = featset_init(13);
-    for (int idx = 0; idx < 6; idx++) {
-        sprintf(fname, "mfcc_0-9/nine_%d.mat", idx);
-        fprintf(stderr, "Reading %s ... \n", fname);
-        featset_read_file(fname, fs);
+    for (int i = 0; i < 10; i++) {
+        sprintf(fname, "models/%s.hmm", num2str[i]);
+        fprintf(stderr, "Reading model from %s ... \n", fname);
+        hmm_set[i] = hmm_read(fname);
+        fprintf(stderr, "done. %s\n", hmm_set[i]->lex);
+    }
+    
+    total_states = topo_gen_transmat(hmm_set, 10, "topos/telephone.topo", &trans_matrix, &state_mapping, &nodes_num);
+
+    fprintf(stderr, "Dummy states: ");
+    for (int n = 0; n < nodes_num; n++) {
+        fprintf(stderr, "%d ", n);
+    }
+    fprintf(stderr, "\n");
+
+    fprintf(stderr, "state_id <=> hmm_id\n");
+    for (int s = nodes_num; s < total_states; s++) {
+        fprintf(stderr, "%d %d\n", s, state_mapping[s]);
     }
 
-    fprintf(stderr, "Training ... ");
-    hmm_train_kmeans(hmm, fs, 50, 0.001);
+    TransMatrix trans_mat;
+    FeatureStruct feat_struct;
+    FeatureSet *fs = featset_init(13);
 
-    hmm_write(hmm, "nine.hmm");
+    trans_mat.trans_matrix = trans_matrix;
+    trans_mat.state_hmm_map = state_mapping;
+    trans_mat.total_states = total_states;
+    trans_mat.dummy_states = nodes_num;
 
-    HMM *hmm2 = hmm_read("nine.hmm");
+    featset_read_file("mfcc_0-9/one_7.mat", fs);
+    
+    feat_struct.feat = fs->feat[0];
+    feat_struct.feat_size = fs->feat_sizes[0];
+    feat_struct.feat_dim = fs->feat_dim;
+
+    
+    hmm_decode_viterbi(hmm_set, 10, &trans_mat, &feat_struct);
 
     return 0;
 }
-*/ 
 
