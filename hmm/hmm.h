@@ -59,4 +59,10 @@ int hmm_write(HMM *hmm, char *filename);
  */
 HMM* hmm_read(char *filename);
 
+/*
+ * Given a set of HMMs, a transition matrix, and a feature, compute the Viterbi alignment
+ * Returns the Viterbi likelihood
+ */
+float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, FeatureStruct *feat_struct);
+
 #endif

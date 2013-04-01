@@ -39,8 +39,55 @@ void hmm_align_equal(int feat_size, int slice, int *align) {
 
 float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, FeatureStruct *feat_struct) {
     assert (hmm_size > 0);
-
+    int total_states = trans_mat->total_states;
+    int dummy_states = trans_mat->dummy_states;
+    float **trans_matrix = trans_mat->trans_matrix;
+    int *state_hmm_map = trans_mat->state_hmm_map;
     
+    // allocate the trellis
+    HMMTrellis **trellis = (HMMTrellis **) malloc(sizeof(HMMTrellis *) * feat_struct->feat_size);
+    for (int t = 0; t < feat_size; t++) {
+        trellis[t] = (HMMTrellis *) malloc(sizeof(HMMTrellis) * total_states);
+        for (int s = 0; s < total_states; s++) {
+            trellis[t][s].value = -FLT_MAX;
+            trellis[t][s].prev.s = -1;
+        }
+    }
+
+    // mark the first dummy state
+    trellis[0][0].value = 1.0;
+    
+    // here we go ... 
+    int t = 0;
+    while (t < feat_struct->feat_size) {
+        for (int s = 0; s < total_states; s++) {
+            float max_prev_ll = -FLT_MAX;
+            float prev_ll = 0.0;
+            int max_prev_st = -1;
+
+            for (int ts = 0; ts < total_states; ts++) {
+                if (trans_matrix[ts][s] > 0) {
+                    if (ts < dummy_states) {
+                        // is a dummy state
+                        prev_ll = trellis[t][ts];
+                    } else {
+                        // is a normal HMM state
+                        prev_ll = trellis[t - 1][ts]
+                    }
+                    if (prev_ll > max_prev_ll) {
+                        max_prev_ll = prev_ll;
+                        max_prev_st = ts;
+                    }
+                }
+            }
+
+            if (max_prev_st == -1) {
+                continue;
+            }
+            // TODO: update the trellis score
+        }
+    }
+
 }
 
 float hmm_align_dtw(HMM* hmm, float **feat, int feat_size, int feat_dim, int *align) {
