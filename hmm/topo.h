@@ -10,9 +10,14 @@ typedef struct struct_topo_list_node {
     struct struct_topo_list_node *next_node;
 } TopoListNode;
 
+typedef struct struct_hmm_state_map {
+    int hmm_id;     // which HMM the state belongs to
+    int hmm_state_id;   // which state inside that HMM this state belongs to
+} HMMStateMap;
+
 typedef struct struct_trans_matrix {
     float **trans_matrix;
-    int *state_hmm_map;
+    HMMStateMap *state_hmm_map;
     int total_states;
     int dummy_states;
 } TransMatrix;

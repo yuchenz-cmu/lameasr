@@ -20,12 +20,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <math.h>
+#include <float.h>
 #include "hmm.h"
 #include "topo.h"
 
 #define LINE_BUF_SIZE (256)
 
-int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matrix, int **state_mapping, int *total_dummy_nodes) {
+int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matrix, HMMStateMap **state_mapping, int *total_dummy_nodes) {
     assert(hmm_size > 0); 
     for (int h = 1; h < hmm_size; h++) {
         assert(hmm_set[h - 1]->state_num == hmm_set[h]->state_num);
@@ -42,7 +44,7 @@ int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matr
     TopoListNode *head_node = (TopoListNode *) malloc(sizeof(TopoListNode));
     TopoListNode *curr_node = head_node;
     TopoListNode *prev_node = NULL;
-    int *hmm_state_map = NULL;
+    HMMStateMap *hmm_state_map = NULL;
     int hmm_states_num = hmm_set[0]->state_num;
 
     while (fgets(buf, LINE_BUF_SIZE, fp) != NULL) {
@@ -83,14 +85,15 @@ int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matr
     for (int s = 0; s < total_states; s++) {
         grid[s] = (float *) malloc(sizeof(float) * total_states);
         for (int p = 0; p < total_states; p++) {
-            grid[s][p] = 0.0;
+            grid[s][p] = -FLT_MAX;
         }
     }
 
     // builds the mapping between state_id and hmm_id
-    hmm_state_map = (int *) malloc(sizeof(int) * total_states);
+    hmm_state_map = (HMMStateMap *) malloc(sizeof(HMMStateMap) * total_states);
     for (int s = 0; s < node_num; s++) {
-        hmm_state_map[s] = -1;  // -1 means dummy state
+        hmm_state_map[s].hmm_id = -1;  // -1 means dummy state
+        hmm_state_map[s].hmm_state_id = -1;
     }
 
     // go through the linked list and fill in the grid
@@ -115,23 +118,25 @@ int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matr
 
         for (int s = 0; s < hmm_states_num; s++) {
             hmm_set[hmm_id]->states[s].id = curr_st_idx;
-            hmm_state_map[curr_st_idx] = hmm_id;
+            hmm_state_map[curr_st_idx].hmm_id = hmm_id;
+            hmm_state_map[curr_st_idx].hmm_state_id = s;
             // grid[curr_st_idx][curr_st_idx + 1] = 1.0;
             curr_st_idx++;
         }
 
         // start dummy node ==> first state
-        grid[curr_node->start_node][hmm_set[hmm_id]->states[0].id] = 1.0;
+        grid[curr_node->start_node][hmm_set[hmm_id]->states[0].id] = 0.0;   // log(1.0)
         fprintf(stderr, "*[%d] ==> [%d]\n", curr_node->start_node, hmm_set[hmm_id]->states[0].id);
 
-        // s[k] ==> s[k + 1]
+        // s[k] ==> s[k + 1], and s[k] ==> s[k]
         for (int s = 0; s < hmm_states_num - 1 ; s++) {
-            grid[hmm_set[hmm_id]->states[s].id][hmm_set[hmm_id]->states[s + 1].id] = 1.0;
+            grid[hmm_set[hmm_id]->states[s].id][hmm_set[hmm_id]->states[s + 1].id] = log(0.5);
+            grid[hmm_set[hmm_id]->states[s].id][hmm_set[hmm_id]->states[s].id] = log(0.5);
             fprintf(stderr, "[%d] ==> [%d]\n", hmm_set[hmm_id]->states[s].id, hmm_set[hmm_id]->states[s + 1].id);
         }
 
         // last state ==> end dummy node
-        grid[hmm_set[hmm_id]->states[hmm_states_num - 1].id][curr_node->end_node] = 1.0;
+        grid[hmm_set[hmm_id]->states[hmm_states_num - 1].id][curr_node->end_node] = 0.0;    // log 1.0
         fprintf(stderr, "[%d] ==> [%d]*\n", hmm_set[hmm_id]->states[hmm_states_num - 1].id, curr_node->end_node);
 
         // free up memory
