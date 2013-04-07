@@ -22,8 +22,8 @@
 #include <assert.h>
 #include <math.h>
 #include <float.h>
-#include "hmm.h"
 #include "topo.h"
+#include "hmm.h"
 
 #define LINE_BUF_SIZE (256)
 

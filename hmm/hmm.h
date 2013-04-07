@@ -3,6 +3,7 @@
 
 #include "gmm.h"
 #include "feat.h"
+#include "topo.h"
 
 typedef struct struct_hmm_state {
     GMM *gmm;
@@ -63,6 +64,6 @@ HMM* hmm_read(char *filename);
  * Given a set of HMMs, a transition matrix, and a feature, compute the Viterbi alignment
  * Returns the Viterbi likelihood
  */
-float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, FeatureStruct *feat_struct);
+float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, FeatureStruct *feat_struct, int *align);
 
 #endif

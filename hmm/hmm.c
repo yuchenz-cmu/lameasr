@@ -37,15 +37,19 @@ void hmm_align_equal(int feat_size, int slice, int *align) {
     }
 }
 
-float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, FeatureStruct *feat_struct, *align) {
+float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, FeatureStruct *feat_struct, int *align) {
+    fprintf(stderr, "hmm_decode_viterbi():\n");
     assert (hmm_size > 0);
     int total_states = trans_mat->total_states;
     int dummy_states = trans_mat->dummy_states;
     float **trans_matrix = trans_mat->trans_matrix;
     HMMStateMap *state_hmm_map = trans_mat->state_hmm_map;
+    int feat_size = feat_struct->feat_size;
+    int feat_dim = feat_struct->feat_dim;
+    float **feat = feat_struct->feat;
     
     // allocate the trellis
-    HMMTrellis **trellis = (HMMTrellis **) malloc(sizeof(HMMTrellis *) * feat_struct->feat_size);
+    HMMTrellis **trellis = (HMMTrellis **) malloc(sizeof(HMMTrellis *) * feat_size);
     for (int t = 0; t < feat_size; t++) {
         trellis[t] = (HMMTrellis *) malloc(sizeof(HMMTrellis) * total_states);
         for (int s = 0; s < total_states; s++) {
@@ -64,7 +68,6 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
             trellis[0][s].value = trellis[0][0].value + trans_matrix[0][s] + gmm_ll;
         }
     }
-    
     
     // here we go ... 
     int t = 0;
@@ -112,11 +115,13 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
                 }
             }
         }
+
+        t++;
     }
 
     // backtrace
     int end_state = dummy_states - 1;
-    float end_ll = trellis[feat_size - 1][end_state]; 
+    float end_ll = trellis[feat_size - 1][end_state].value; 
     int curr_st = end_state;
     int curr_t = feat_size - 1;
     while (curr_t >= 0) {
@@ -445,10 +450,10 @@ void hmm_train_kmeans(HMM *hmm, FeatureSet *fs, int max_iter, float tolerance) {
 
         // compute the alignment
         for (int idx = 0; idx < fs->feat_num; idx++) {
-            for (int t = 0; t < fs->feat_sizes[idx]; t++) {
-                fprintf(stderr, "%d ", alignset[idx][t]);
-            }
-            fprintf(stderr, "\n");
+            // for (int t = 0; t < fs->feat_sizes[idx]; t++) {
+            //     fprintf(stderr, "%d ", alignset[idx][t]);
+            // }
+            // fprintf(stderr, "\n");
 
             curr_ll = hmm_align_dtw(hmm, fs->feat[idx], fs->feat_sizes[idx], fs->feat_dim, alignset[idx]) / (float) fs->feat_sizes[idx];
             bestpath_ll += curr_ll;
@@ -639,12 +644,13 @@ HMM* hmm_read(char *filename) {
     return hmm;
 }
 
+/* 
 int main(int argc, char **argv) {
     char fname[256];
     char *num2str[] = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
     HMM **hmm_set = malloc(sizeof(HMM *) * 10);
     float **trans_matrix = NULL;
-    int *state_mapping = NULL;
+    HMMStateMap *state_mapping = NULL;
     int total_states = 0;
     int nodes_num = 0;
 
@@ -655,7 +661,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "done. %s\n", hmm_set[i]->lex);
     }
     
-    total_states = topo_gen_transmat(hmm_set, 10, "topos/telephone.topo", &trans_matrix, &state_mapping, &nodes_num);
+    // total_states = topo_gen_transmat(hmm_set, 10, "topos/telephone.topo", &trans_matrix, &state_mapping, &nodes_num);
+    total_states = topo_gen_transmat(hmm_set, 10, "topos/numbers.topo", &trans_matrix, &state_mapping, &nodes_num);
 
     fprintf(stderr, "Dummy states: ");
     for (int n = 0; n < nodes_num; n++) {
@@ -665,7 +672,7 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "state_id <=> hmm_id\n");
     for (int s = nodes_num; s < total_states; s++) {
-        fprintf(stderr, "%d %d\n", s, state_mapping[s]);
+        fprintf(stderr, "%d %d\n", s, state_mapping[s].hmm_id);
     }
 
     TransMatrix trans_mat;
@@ -677,15 +684,29 @@ int main(int argc, char **argv) {
     trans_mat.total_states = total_states;
     trans_mat.dummy_states = nodes_num;
 
-    featset_read_file("mfcc_0-9/one_7.mat", fs);
+    // featset_read_file("mfcc_0-9/five_5.mat", fs);
+    featset_read_file("mfccs/2_1_5.mfcc", fs);
     
     feat_struct.feat = fs->feat[0];
     feat_struct.feat_size = fs->feat_sizes[0];
     feat_struct.feat_dim = fs->feat_dim;
 
+    int *align = (int *) malloc(sizeof(int) * fs->feat_sizes[0]);
     
-    hmm_decode_viterbi(hmm_set, 10, &trans_mat, &feat_struct);
+    hmm_decode_viterbi(hmm_set, 10, &trans_mat, &feat_struct, align);
+    
+    // print the alignment
+    int curr_hmm_id = 0;
+    for (int t = 0; t < feat_struct.feat_size; t++) {
+        // fprintf(stderr, "%d ", align[t]);
+        curr_hmm_id = state_mapping[align[t]].hmm_id;
+        // fprintf(stderr, "%d ", curr_hmm_id);
+        if (curr_hmm_id >= 0) {
+            fprintf(stderr, "%s ", hmm_set[curr_hmm_id]->lex);
+        }
+    }
+    fprintf(stderr, "\n");
 
     return 0;
 }
-
+*/
