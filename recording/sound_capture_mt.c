@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <math.h>
 #include <unistd.h>
+#include <ncurses.h>
 #include "portaudio.h"
 
 #define SAMPLE_RATE             (16000)
@@ -17,6 +18,7 @@
 #define SPEECH_ADJUSTMENT       (0.05)
 #define SPEECH_THRESHOLD        (10.0)
 #define SPEECH_FRAME_SPAN       (10)
+#define NO_SPEECH_THRESHOLD     (1800)
 
 typedef struct {
     // long          frameIndex;  /*  Index into sample array. */
@@ -39,6 +41,33 @@ typedef struct {
 
 pthread_mutex_t recordMutex;
 int energyThreshold;
+
+/* 
+ * non-blocking call, checks if a key is pressed
+ */
+int kbhit(void) {
+
+    initscr();
+    cbreak();
+    noecho();
+    nodelay(stdscr, TRUE);
+    scrollok(stdscr, TRUE);
+    // refresh();
+    // keypad(stdscr, TRUE);
+
+    int ch = getch();
+
+    if (ch != ERR) {
+        // ungetch(ch);
+        refresh();
+        endwin();
+        return 1;
+    } else {
+        refresh();
+        endwin();
+        return 0;
+    }
+}
 
 int recordCallback( const void *inputBuffer, void *outputBuffer,
                            unsigned long framesPerBuffer,
@@ -84,7 +113,7 @@ int recordCallback( const void *inputBuffer, void *outputBuffer,
             }
             // fprintf(stderr, "consecutiveNoSpeech: %d\n", consecutiveNoSpeech);
 
-            if (consecutiveNoSpeech > 1100) {
+            if (consecutiveNoSpeech > NO_SPEECH_THRESHOLD) {
                 fprintf(stderr, "Detected end-point at frame %d ... \n", data->endIdx);
                 data->isRecording = 0;
                 consecutiveNoSpeech = 0;
@@ -200,6 +229,7 @@ int recordAudio(char *sphinxfe_bin, char *sphinxcepview_bin, int energyThreshold
     while (1) {
         // enable "Hit-to-talk"
         printf("Press [Enter] to start recording ... \n");
+        printf("Hold [Space] to stop recording.\n");
         getchar();
 
         // prepare filename
@@ -259,13 +289,23 @@ int recordAudio(char *sphinxfe_bin, char *sphinxcepview_bin, int energyThreshold
             fprintf(stderr, "startIdx = %d, endIdx = %d, second: %d\n", data.startIdx, data.endIdx, secondsRecorded); 
             fflush(stderr);
               
-            // if (secondsRecorded > 30) {
-            //     pthread_mutex_lock(&recordMutex);
-            //     data.isRecording = 0;
-            //     pthread_mutex_unlock(&recordMutex);
-            // }
+            /* 
+            if (secondsRecorded > 30) {
+                pthread_mutex_lock(&recordMutex);
+                data.isRecording = 0;
+                pthread_mutex_unlock(&recordMutex);
+            }
+            */
 
-            // secondsRecorded++;
+            if (kbhit()) {
+                fprintf(stderr, "Key pressed, stop recording ... %d\n", getch());
+
+                pthread_mutex_lock(&recordMutex);
+                data.isRecording = 0;
+                pthread_mutex_unlock(&recordMutex);
+            }
+
+            secondsRecorded++;
         }
 
         fprintf(stderr, "Waiting for write thread to join ... \n");
@@ -288,8 +328,13 @@ int recordAudio(char *sphinxfe_bin, char *sphinxcepview_bin, int energyThreshold
             fprintf(stderr, "Computing MFCC features ... ");
             sprintf(cmdBuf, "%s -i recorded_%d.wav -o recorded_%d.mfcc -mswav yes", sphinxfe_bin, recordIdx, recordIdx);
             system(cmdBuf);
+            sprintf(cmdBuf, "%s -i recorded_%d.wav -o recorded_%d_nfilter25.mfcc -mswav yes -nfilt 25", sphinxfe_bin, recordIdx, recordIdx);
+            system(cmdBuf);
             sprintf(cmdBuf, "%s -f recorded_%d.mfcc -d 13 | sed \"s/^ *//;s/ *$//;s/  */ /g\" > recorded_%d.mfcc.visual", sphinxcepview_bin, recordIdx, recordIdx);
             system(cmdBuf);
+            sprintf(cmdBuf, "%s -f recorded_%d_nfilter25.mfcc -d 13 | sed \"s/^ *//;s/ *$//;s/  */ /g\" > recorded_%d_nfilter25.mfcc.visual", sphinxcepview_bin, recordIdx, recordIdx);
+            system(cmdBuf);
+
             fprintf(stderr, "done.\n");
 
             fprintf(stderr, "Computing Logspec features ... ");
@@ -317,7 +362,16 @@ int main(int argc, char** argv) {
     char *sphinxcepview_bin = NULL;
     energyThreshold = 1400;
     int i;
-   
+
+    // initialize ncurses
+    // initscr();
+    // cbreak();
+    // noecho();
+    // nodelay(stdscr, TRUE);
+    // scrollok(stdscr, TRUE);
+    // refresh();
+    // keypad(stdscr, TRUE);
+
     i = 1;
     while (i < argc) {
         if (!strcmp(argv[i], "--sphinx-bin")) {
@@ -369,6 +423,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "PortAudio terminated.\n");
     }
 
+    // endwin();
     pthread_mutex_destroy(&recordMutex);
     return returnValue;
 }
