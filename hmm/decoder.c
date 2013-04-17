@@ -28,7 +28,7 @@ void print_usage(char *msg) {
     if (msg) {
         fprintf(stderr, "%s\n", msg);
     }
-    fprintf(stderr, "Usage: ./decoder --topo <topology file> --model-list <model file list> --feat <feature file> --dim <feature dimension>\n");
+    fprintf(stderr, "Usage: ./decoder --topo <topology file> --model-list <model file list> --feat <feature file> --dim <feature dimension> --sil-word <sil_2>\n");
 }
 
 int read_models(FILE *fmodel_list, HMM ***hmm_set) {
@@ -59,6 +59,7 @@ int main(int argc, char **argv) {
     char *topo_file = NULL;
     char *model_list_file = NULL;
     char *feat_file = NULL;
+    char *sil_word = "sil_2";
     int feat_dim = 0;
     int arg_idx = 1;
 
@@ -91,6 +92,13 @@ int main(int argc, char **argv) {
             }
             feat_dim = atoi(argv[arg_idx + 1]);
             arg_idx += 2;
+        } else if (!strcmp(argv[arg_idx], "--sil-word")) {
+            if (arg_idx + 1 >= argc) {
+                print_usage("Missing argument.");
+                return 2;
+            }
+            sil_word = argv[arg_idx + 1];
+            arg_idx += 2;
         } else {
             print_usage("Invalid argument.");
             return 3;
@@ -101,6 +109,7 @@ int main(int argc, char **argv) {
         print_usage("Missing argument.");
         return 4;
     }
+    fprintf(stderr, "Using silent word %s ... \n", sil_word);
 
     // reads in models
     HMM **hmm_set = NULL;
@@ -115,7 +124,7 @@ int main(int argc, char **argv) {
     int total_states = 0;
     int nodes_num = 0;
 
-    total_states = topo_gen_transmat(hmm_set, hmm_size, topo_file, &trans_matrix, &state_mapping, &nodes_num);
+    total_states = topo_gen_transmat(hmm_set, hmm_size, topo_file, &trans_matrix, &state_mapping, &nodes_num, 0.0);
     fprintf(stderr, "Loaded topology for HMM.\n");
 
     // prepare for decoding
@@ -145,8 +154,8 @@ int main(int argc, char **argv) {
         curr_hmm_id = state_mapping[align[t]].hmm_id;
         // fprintf(stderr, "%d ", curr_hmm_id);
         if (curr_hmm_id != prev_hmm_id) { 
-            if (curr_hmm_id >= 0 && strcmp(hmm_set[curr_hmm_id]->lex, "sil_2")) {
-                fprintf(stderr, "%s ", hmm_set[curr_hmm_id]->lex);
+            if (curr_hmm_id >= 0 && strcmp(hmm_set[curr_hmm_id]->lex, sil_word)) {
+                printf("%s ", hmm_set[curr_hmm_id]->lex);
             }
         }
         prev_hmm_id = curr_hmm_id;

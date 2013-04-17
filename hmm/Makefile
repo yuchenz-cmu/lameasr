@@ -1,4 +1,16 @@
-all: hmm
+all: train_single_word decoder
+
+decoder: decoder.o hmm.o feat.o gmm.o topo.o utils.o
+	gcc hmm.o feat.o decoder.o gmm.o topo.o utils.o -o decoder -lm
+
+decoder.o: decoder.c
+	gcc -g -std=c99 -c decoder.c -o decoder.o
+
+train_single_word: train_single_word.o hmm.o feat.o gmm.o utils.o
+	gcc hmm.o feat.o train_single_word.o gmm.o utils.o -o train_single_word -lm
+
+train_single_word.o: train_single_word.c
+	gcc -g -std=c99 -c train_single_word.c -o train_single_word.o
 
 controller: controller.o feat.o gmm.o hmm.o utils.o
 	gcc feat.o gmm.o controller.o hmm.o utils.o -o controller -lm
@@ -18,8 +30,8 @@ feat.o: feat.c
 feat: feat.o
 	gcc feat.o -o feat
 
-hmm: hmm.o gmm.o utils.o feat.o topo.o
-	gcc hmm.o gmm.o utils.o feat.o topo.o -o hmm -lm
+hmm: topo.o hmm.o gmm.o utils.o feat.o
+	gcc topo.o hmm.o gmm.o utils.o feat.o -o hmm -lm
 
 hmm.o: hmm.c
 	gcc -g -std=c99 -c hmm.c -o hmm.o
@@ -27,10 +39,10 @@ hmm.o: hmm.c
 utils.o: utils.c
 	gcc -g -std=c99 -c utils.c -o utils.o
 
-topo: topo.o
+topo: topo.o 
 	gcc topo.o -o topo
 
-topo.o: topo.c
+topo.o: topo.c 
 	gcc -g -std=c99 -c topo.c -o topo.o
 
 clean: 
@@ -38,7 +50,9 @@ clean:
 	-rm feat.o
 	-rm controller.o
 	-rm hmm.o
+	-rm train_single_word.o
 	-rm gmm 
 	-rm feat
 	-rm controller
 	-rm hmm
+	-rm train_single_word

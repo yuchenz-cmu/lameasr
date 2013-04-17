@@ -27,7 +27,7 @@
 
 #define LINE_BUF_SIZE (256)
 
-int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matrix, HMMStateMap **state_mapping, int *total_dummy_nodes) {
+int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matrix, HMMStateMap **state_mapping, int *total_dummy_nodes, float word_ins_penalty) {
     assert(hmm_size > 0); 
     for (int h = 1; h < hmm_size; h++) {
         assert(hmm_set[h - 1]->state_num == hmm_set[h]->state_num);
@@ -48,6 +48,9 @@ int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matr
     int hmm_states_num = hmm_set[0]->state_num;
 
     while (fgets(buf, LINE_BUF_SIZE, fp) != NULL) {
+        if (buf[0] == '#') {
+            continue;
+        }
         buf[strlen(buf) - 1] = '\0';
         if (lc == 0) {
             // total number of nodes
@@ -135,8 +138,11 @@ int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matr
             fprintf(stderr, "[%d] ==> [%d]\n", hmm_set[hmm_id]->states[s].id, hmm_set[hmm_id]->states[s + 1].id);
         }
 
+        // last state ==> last state
+        grid[hmm_set[hmm_id]->states[hmm_states_num - 1].id][hmm_set[hmm_id]->states[hmm_states_num - 1].id] = log(0.5);
+
         // last state ==> end dummy node
-        grid[hmm_set[hmm_id]->states[hmm_states_num - 1].id][curr_node->end_node] = 0.0;    // log 1.0
+        grid[hmm_set[hmm_id]->states[hmm_states_num - 1].id][curr_node->end_node] = log(0.5) + word_ins_penalty;    // log 1.0
         fprintf(stderr, "[%d] ==> [%d]*\n", hmm_set[hmm_id]->states[hmm_states_num - 1].id, curr_node->end_node);
 
         // free up memory

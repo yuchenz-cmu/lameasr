@@ -29,7 +29,7 @@ typedef struct struct_trans_matrix {
  * Generates the transition matrix from a topology set, based on the HMMs we have.
  * Returns the total number of unique HMM states (including dummy state) defined by the topology
  * */
-int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matrix, HMMStateMap **state_mapping, int *total_dummy_nodes);
+int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matrix, HMMStateMap **state_mapping, int *total_dummy_nodes, float word_ins_penalty);
 
 /*
  * Given a set of HMMs, assign each state a unique state-id starting from 0
