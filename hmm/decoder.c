@@ -21,6 +21,7 @@
 #include <string.h>
 #include "hmm.h"
 #include "topo.h"
+#include "align.h"
 
 #define BUF_LEN (512)
 
@@ -28,7 +29,7 @@ void print_usage(char *msg) {
     if (msg) {
         fprintf(stderr, "%s\n", msg);
     }
-    fprintf(stderr, "Usage: ./decoder --topo <topology file> --model-list <model file list> --feat <feature file> --dim <feature dimension> --sil-word <sil_2>\n");
+    fprintf(stderr, "Usage: ./decoder --topo <topology file> --model-list <model file list> --feat <feature file> --dim <feature dimension> --sil-word <sil_2> --align-file <align_file>\n");
 }
 
 int read_models(FILE *fmodel_list, HMM ***hmm_set) {
@@ -60,6 +61,7 @@ int main(int argc, char **argv) {
     char *model_list_file = NULL;
     char *feat_file = NULL;
     char *sil_word = "sil_2";
+    char *align_file = NULL;
     int feat_dim = 0;
     int arg_idx = 1;
 
@@ -98,6 +100,13 @@ int main(int argc, char **argv) {
                 return 2;
             }
             sil_word = argv[arg_idx + 1];
+            arg_idx += 2;
+        } else if (!strcmp(argv[arg_idx], "--align-file")) {
+            if (arg_idx + 1 > argc) {
+                print_usage("Missing argument.");
+                return 2;
+            }
+            align_file = argv[arg_idx + 1];
             arg_idx += 2;
         } else {
             print_usage("Invalid argument.");
@@ -160,7 +169,15 @@ int main(int argc, char **argv) {
         }
         prev_hmm_id = curr_hmm_id;
     }
-    fprintf(stderr, "\n");
+    printf("\n");
+
+    if (align_file != NULL) {
+        fprintf(stderr, "Writing alignment ... ");
+        FILE *fp = fopen(align_file, "wb");  
+        align_write(align, decode_fs->feat_sizes[0], total_states, state_mapping, fp);
+        fclose(fp);
+        fprintf(stderr, "done\n");
+    }
 
     return 0;
 }

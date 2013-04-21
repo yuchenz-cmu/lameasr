@@ -125,6 +125,10 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
     int curr_st = end_state;
     int curr_t = feat_size - 1;
     while (curr_t >= 0) {
+        // we only keep alignment of regular states, ignore dummy states
+        while (curr_st < dummy_states) {
+            curr_st = trellis[curr_t][curr_st].prev.s;
+        }
         align[curr_t] = curr_st;
         curr_st = trellis[curr_t][curr_st].prev.s;
         curr_t--;
@@ -261,11 +265,7 @@ void hmm_update_gmm(HMM *hmm, float **feat, int feat_size, int feat_dim, int *al
 }
 */
 
-/*
- * Given an HMM, a FeatureSet, and a set of alignment of being at which state at time t,
- * update the GMM's parameters
- * */
-void hmm_update_gmm(HMM *hmm, FeatureSet *fs, int **alignset) {
+void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMStateMap *state_hmm_map) {
     assert (hmm->state_num > 0);
 
     float *acc_gamma = NULL;
@@ -308,7 +308,7 @@ void hmm_update_gmm(HMM *hmm, FeatureSet *fs, int **alignset) {
             // for every frame
             for (int t = 0; t < curr_feat_size; t++) {
                 // only update the frames assigned to the state s
-                if (alignset[idx][t] != s) {
+                if (state_hmm_map[alignset[idx][t]].hmm_id != hmm_id || state_hmm_map[alignset[idx][t]].hmm_state_id != s) {
                     continue;
                 }
 
@@ -372,6 +372,8 @@ void hmm_update_gmm(HMM *hmm, FeatureSet *fs, int **alignset) {
     }
 }
 
+void hmm_train_continuous(HMM **hmm_set, int hmm_size, FeatureSet *fs, 
+
 /*
  * Given a FeatureSet, an HMM, updates the HMM GMM's parameters iteratively
  * (First iteration is divided equally, the rest uses DTW alignment)
@@ -383,17 +385,6 @@ void hmm_train_kmeans(HMM *hmm, FeatureSet *fs, int max_iter, float tolerance) {
     hmm_clear_gmm(hmm);
     for (int s = 0; s < hmm->state_num; s++) {
         gmm_mean_var(hmm->states[s].gmm, fs->feat[0], fs->feat_sizes[0], fs->feat_dim);
-        /*
-        for (int g = 0; g < hmm->states[s].gmm->mixture_num; g++) {
-            for (int d = 0; d < fs->feat_dim; d++) {
-                hmm->states[s].gmm->mean[g][d] = rand() / (float) RAND_MAX;
-                hmm->states[s].gmm->var[g][d] = rand() / (float) RAND_MAX;
-            }
-            hmm->states[s].gmm->weight[g] = rand() / (float) RAND_MAX;
-        }
-
-        gmm_normalize_weight(hmm->states[s].gmm);
-        */
 
         float eq_wght = 1.0 / (float) hmm->states[s].gmm->mixture_num;
         for (int g = 0; g < hmm->states[s].gmm->mixture_num; g++) {
@@ -644,69 +635,3 @@ HMM* hmm_read(char *filename) {
     return hmm;
 }
 
-/* 
-int main(int argc, char **argv) {
-    char fname[256];
-    char *num2str[] = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
-    HMM **hmm_set = malloc(sizeof(HMM *) * 10);
-    float **trans_matrix = NULL;
-    HMMStateMap *state_mapping = NULL;
-    int total_states = 0;
-    int nodes_num = 0;
-
-    for (int i = 0; i < 10; i++) {
-        sprintf(fname, "models/%s.hmm", num2str[i]);
-        fprintf(stderr, "Reading model from %s ... \n", fname);
-        hmm_set[i] = hmm_read(fname);
-        fprintf(stderr, "done. %s\n", hmm_set[i]->lex);
-    }
-    
-    // total_states = topo_gen_transmat(hmm_set, 10, "topos/telephone.topo", &trans_matrix, &state_mapping, &nodes_num);
-    total_states = topo_gen_transmat(hmm_set, 10, "topos/numbers.topo", &trans_matrix, &state_mapping, &nodes_num);
-
-    fprintf(stderr, "Dummy states: ");
-    for (int n = 0; n < nodes_num; n++) {
-        fprintf(stderr, "%d ", n);
-    }
-    fprintf(stderr, "\n");
-
-    fprintf(stderr, "state_id <=> hmm_id\n");
-    for (int s = nodes_num; s < total_states; s++) {
-        fprintf(stderr, "%d %d\n", s, state_mapping[s].hmm_id);
-    }
-
-    TransMatrix trans_mat;
-    FeatureStruct feat_struct;
-    FeatureSet *fs = featset_init(13);
-
-    trans_mat.trans_matrix = trans_matrix;
-    trans_mat.state_hmm_map = state_mapping;
-    trans_mat.total_states = total_states;
-    trans_mat.dummy_states = nodes_num;
-
-    // featset_read_file("mfcc_0-9/five_5.mat", fs);
-    featset_read_file("mfccs/2_1_5.mfcc", fs);
-    
-    feat_struct.feat = fs->feat[0];
-    feat_struct.feat_size = fs->feat_sizes[0];
-    feat_struct.feat_dim = fs->feat_dim;
-
-    int *align = (int *) malloc(sizeof(int) * fs->feat_sizes[0]);
-    
-    hmm_decode_viterbi(hmm_set, 10, &trans_mat, &feat_struct, align);
-    
-    // print the alignment
-    int curr_hmm_id = 0;
-    for (int t = 0; t < feat_struct.feat_size; t++) {
-        // fprintf(stderr, "%d ", align[t]);
-        curr_hmm_id = state_mapping[align[t]].hmm_id;
-        // fprintf(stderr, "%d ", curr_hmm_id);
-        if (curr_hmm_id >= 0) {
-            fprintf(stderr, "%s ", hmm_set[curr_hmm_id]->lex);
-        }
-    }
-    fprintf(stderr, "\n");
-
-    return 0;
-}
-*/

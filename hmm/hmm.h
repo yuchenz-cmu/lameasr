@@ -39,7 +39,12 @@ float hmm_align_dtw(HMM* hmm, float **feat, int feat_size, int feat_dim, int *al
  */
 HMM *hmm_init(int state_num, int gs_num, int feat_dim, char *lex);
 
-void hmm_update_gmm();
+/*
+ * Given an HMM, a FeatureSet, and a set of alignment of being at which state at time t,
+ * update the GMM's parameters
+ */
+void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMStateMap *state_hmm_map);
+
 void hmm_clear_gmm(HMM *hmm);
 
 /*

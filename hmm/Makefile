@@ -1,7 +1,13 @@
-all: train_single_word decoder
+all: train_single_word decoder show_align
 
-decoder: decoder.o hmm.o feat.o gmm.o topo.o utils.o
-	gcc hmm.o feat.o decoder.o gmm.o topo.o utils.o -o decoder -lm
+show_align: show_align.o topo.o align.o
+	gcc show_align.o topo.o align.o -o show_align -lm
+
+show_align.o: show_align.c
+	gcc -g -std=c99 -c show_align.c -o show_align.o
+
+decoder: decoder.o hmm.o feat.o gmm.o topo.o utils.o align.o
+	gcc hmm.o feat.o decoder.o gmm.o topo.o utils.o align.o -o decoder -lm
 
 decoder.o: decoder.c
 	gcc -g -std=c99 -c decoder.c -o decoder.o
@@ -30,6 +36,9 @@ feat.o: feat.c
 feat: feat.o
 	gcc feat.o -o feat
 
+align.o: align.c
+	gcc -g -std=c99 -c align.c -o align.o
+
 hmm: topo.o hmm.o gmm.o utils.o feat.o
 	gcc topo.o hmm.o gmm.o utils.o feat.o -o hmm -lm
 
@@ -50,9 +59,12 @@ clean:
 	-rm feat.o
 	-rm controller.o
 	-rm hmm.o
+	-rm align.o
 	-rm train_single_word.o
+	-rm show_align.o
 	-rm gmm 
 	-rm feat
 	-rm controller
 	-rm hmm
 	-rm train_single_word
+	-rm show_align
