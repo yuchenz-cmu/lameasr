@@ -3,11 +3,14 @@
 
 #include <stdlib.h>
 
+#define FILENAME_LEN (512)
+#define TEXT_LEN (1024)
+
 typedef struct struct_database_record {
     int utt_id;
-    char *text;
-    char *topo_file; 
-    char *feat_file;
+    char text[TEXT_LEN];
+    char topo_file[FILENAME_LEN]; 
+    char feat_file[FILENAME_LEN];
 } Record;
 
 typedef struct struct_database {

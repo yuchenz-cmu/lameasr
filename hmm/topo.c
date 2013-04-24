@@ -107,7 +107,7 @@ int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matr
         // TODO: This is stupid, should use a hash table
         
         int hmm_id = -1;
-        fprintf(stderr, "node_lex: %s\n", curr_node->lex);
+        // fprintf(stderr, "node_lex: %s\n", curr_node->lex);
         for (int h = 0; h < hmm_size; h++) {
             // fprintf(stderr, "%s\n", hmm_set[h]->lex);
             if (!strcmp(hmm_set[h]->lex, curr_node->lex)) {
@@ -129,13 +129,13 @@ int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matr
 
         // start dummy node ==> first state
         grid[curr_node->start_node][hmm_set[hmm_id]->states[0].id] = 0.0;   // log(1.0)
-        fprintf(stderr, "*[%d] ==> [%d]\n", curr_node->start_node, hmm_set[hmm_id]->states[0].id);
+        // fprintf(stderr, "*[%d] ==> [%d]\n", curr_node->start_node, hmm_set[hmm_id]->states[0].id);
 
         // s[k] ==> s[k + 1], and s[k] ==> s[k]
         for (int s = 0; s < hmm_states_num - 1 ; s++) {
             grid[hmm_set[hmm_id]->states[s].id][hmm_set[hmm_id]->states[s + 1].id] = log(0.5);
             grid[hmm_set[hmm_id]->states[s].id][hmm_set[hmm_id]->states[s].id] = log(0.5);
-            fprintf(stderr, "[%d] ==> [%d]\n", hmm_set[hmm_id]->states[s].id, hmm_set[hmm_id]->states[s + 1].id);
+            // fprintf(stderr, "[%d] ==> [%d]\n", hmm_set[hmm_id]->states[s].id, hmm_set[hmm_id]->states[s + 1].id);
         }
 
         // last state ==> last state
@@ -143,7 +143,7 @@ int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matr
 
         // last state ==> end dummy node
         grid[hmm_set[hmm_id]->states[hmm_states_num - 1].id][curr_node->end_node] = log(0.5) + word_ins_penalty;    // log 1.0
-        fprintf(stderr, "[%d] ==> [%d]*\n", hmm_set[hmm_id]->states[hmm_states_num - 1].id, curr_node->end_node);
+        // fprintf(stderr, "[%d] ==> [%d]*\n", hmm_set[hmm_id]->states[hmm_states_num - 1].id, curr_node->end_node);
 
         // free up memory
         head_node = curr_node->next_node;

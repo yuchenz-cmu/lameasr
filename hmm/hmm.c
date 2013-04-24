@@ -26,6 +26,7 @@
 #include "feat.h"
 #include "utils.h"
 #include "topo.h"
+#include "database.h"
 
 #define MAX_GAUSSIANS (4)
 
@@ -119,6 +120,7 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
         t++;
     }
 
+    fprintf(stderr, "Doing back trace ... \n");
     // backtrace
     int end_state = dummy_states - 1;
     float end_ll = trellis[feat_size - 1][end_state].value; 
@@ -241,31 +243,7 @@ void hmm_clear_gmm(HMM *hmm) {
     }
 }
 
-/*
- * Given an HMM, a set of frames, and an alignment of which state each frame is in,
- * update the corresponding GMM's parameters
- * */
-/*
-void hmm_update_gmm(HMM *hmm, float **feat, int feat_size, int feat_dim, int *alignment) {
-    assert(hmm->state_num > 0);
-    assert(hmm->states[0].gmm->feat_dim == feat_dim);
-
-    for (int s = 0; s < hmm->state_num; s++) {
-        int start_idx = 0;
-        while (start_idx < feat_size && alignment[start_idx] != s) start_idx++;
-
-        int st_len = 0;
-        while (start_idx + st_len < feat_size && alignment[start_idx + st_len] == s) st_len++;
-
-        // update the GMM parameters
-        if (st_len > 0) {
-            gmm_mean_var(hmm->states[s].gmm, feat + start_idx, st_len, feat_dim);
-        }
-    }
-}
-*/
-
-void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMStateMap *state_hmm_map) {
+void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransMatrix *trans_mat_set) {
     assert (hmm->state_num > 0);
 
     float *acc_gamma = NULL;
@@ -278,7 +256,7 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMSta
     int curr_feat_size = 0;
 
     for (int s = 0; s < hmm->state_num; s++) {
-        fprintf(stderr, "Training state %d ... \n", s);
+        // fprintf(stderr, "Training state %d ... \n", s);
         // initialize all accumulators
         mixture_num = hmm->states[s].gmm->mixture_num;
         acc_gamma = (float *) malloc(sizeof(float) * mixture_num);
@@ -305,12 +283,15 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMSta
         for (int idx = 0; idx < fs->feat_num; idx++) {
             curr_feat = fs->feat[idx];
             curr_feat_size = fs->feat_sizes[idx];
+            HMMStateMap *curr_state_map = trans_mat_set[idx].state_hmm_map;
+
             // for every frame
             for (int t = 0; t < curr_feat_size; t++) {
                 // only update the frames assigned to the state s
-                if (state_hmm_map[alignset[idx][t]].hmm_id != hmm_id || state_hmm_map[alignset[idx][t]].hmm_state_id != s) {
+                if (curr_state_map[alignset[idx][t]].hmm_id != hmm_id || curr_state_map[alignset[idx][t]].hmm_state_id != s) {
                     continue;
                 }
+                // fprintf(stderr, "hmm_id: %d, hmm_state_id: %d, align_state_id: %d\n", hmm_id, s, alignset[idx][t]);
 
                 gammaD = 0.0;
                 // for every gaussian
@@ -345,14 +326,14 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMSta
         }
 
         for (int g = 0; g < mixture_num; g++) {
-            // fprintf(stderr, "mean: ");
+            fprintf(stderr, "mean: ");
             for (int d = 0; d < fs->feat_dim; d++) {
                 float new_mean = (float) acc_mean[g][d] / (float) acc_gamma[g];
                 hmm->states[s].gmm->mean[g][d] = new_mean;
                 hmm->states[s].gmm->var[g][d] = (float) acc_var[g][d] / (float) acc_gamma[g] - new_mean * new_mean;
-                // fprintf(stderr, "%f ", hmm->states[s].gmm->mean[g][d]);
+                fprintf(stderr, "%f ", hmm->states[s].gmm->mean[g][d]);
             }
-            // fprintf(stderr, "\n");
+            fprintf(stderr, "\n");
             hmm->states[s].gmm->weight[g] = (float) acc_gamma[g] / (float) all_gammas;
         }
 
@@ -372,7 +353,115 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMSta
     }
 }
 
-void hmm_train_continuous(HMM **hmm_set, int hmm_size, FeatureSet *fs, 
+void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance) {
+    assert (hmm_size > 0);
+
+    // prepare the FeatureSet from database
+    fprintf(stderr, "Reading features ... \n");
+    FeatureSet *fs = featset_init(feat_dim);
+    for (int r = 0; r < db->record_size; r++) {
+        if (db->record[r].feat_file[strlen(db->record[r].feat_file) - 1] == '\n') {
+            db->record[r].feat_file[strlen(db->record[r].feat_file) - 1] = '\0';
+        }
+        fprintf(stderr, "Reading from %s ... \n", db->record[r].feat_file);
+        featset_read_file(db->record[r].feat_file, fs);
+    }
+    fprintf(stderr, "done.\n");
+
+    float avg_ll = -FLT_MAX;
+    float bestpath_ll = 0.0;
+    float curr_ll = 0.0;
+    int iter = 0;
+
+    // for every training utterance (feature), prepare a transition matrix
+    fprintf(stderr, "Generating topologies for training instances ... \n");
+    TransMatrix *trans_mat_set = (TransMatrix *) malloc(sizeof(TransMatrix) * db->record_size);
+    for (int t = 0; t < db->record_size; t++) {
+        trans_mat_set[t].trans_matrix = NULL;
+        trans_mat_set[t].state_hmm_map = NULL;
+        trans_mat_set[t].total_states = 0;
+        trans_mat_set[t].dummy_states = 0;
+
+        // total_states = topo_gen_transmat(hmm_set, hmm_size, topo_file, &trans_matrix, &state_mapping, &nodes_num, 0.0);
+        trans_mat_set[t].total_states = topo_gen_transmat(hmm_set, hmm_size, db->record[t].topo_file, &trans_mat_set[t].trans_matrix, &trans_mat_set[t].state_hmm_map, &trans_mat_set[t].dummy_states, 0.0);
+    }
+
+    // for every training utterance (feature), prepare a feature structure
+    FeatureStruct *feat_struct_set = (FeatureStruct *) malloc(sizeof(FeatureStruct) * db->record_size);
+    for (int f = 0; f < db->record_size; f++) {
+        feat_struct_set[f].feat = fs->feat[f];
+        feat_struct_set[f].feat_size = fs->feat_sizes[f];
+        feat_struct_set[f].feat_dim = fs->feat_dim;
+    }
+
+    // prepare the alignment set (each alignment is of length of its feature)
+    int **alignset = (int **) malloc(sizeof(int *) * db->record_size);
+    for (int idx = 0; idx < fs->feat_num; idx++) {
+        alignset[idx] = (int *) malloc(sizeof(int) * fs->feat_sizes[idx]);
+    }
+
+    while (iter < max_iter) {
+        // for every feature, compute the alignment
+        for (int feat_idx = 0; feat_idx < fs->feat_num; feat_idx++) {
+            // hmm_decode_viterbi(hmm_set, hmm_size, &trans_mat, &feat_struct, align);
+            curr_ll = hmm_decode_viterbi(hmm_set, hmm_size, &trans_mat_set[feat_idx], &feat_struct_set[feat_idx], alignset[feat_idx]);
+            bestpath_ll += curr_ll;
+            fprintf(stderr, "Likelihood for utterance %d is %f\n", feat_idx, curr_ll);
+            fprintf(stderr, "Alignment for '%s' is \n", db->record[feat_idx].text);
+
+            int prev_hmm_id = -1;
+            for (int t = 0; t < fs->feat_sizes[feat_idx]; t++) {
+                int curr_hmm_id = trans_mat_set[feat_idx].state_hmm_map[alignset[feat_idx][t]].hmm_id;
+                if (curr_hmm_id < 0 || curr_hmm_id >= hmm_size) {
+                    continue;
+                }
+
+                if (curr_hmm_id != prev_hmm_id) {
+                    fprintf(stderr, "%d(%s) ", curr_hmm_id,  hmm_set[curr_hmm_id]->lex);
+                    prev_hmm_id = curr_hmm_id;
+                }
+            }
+            fprintf(stderr, "\n");
+
+            for (int t = 0; t < fs->feat_sizes[feat_idx]; t++) {
+                fprintf(stderr, "%d ", alignset[feat_idx][t]);
+            }
+            fprintf(stderr, "\n");
+        }
+
+        // update the hmm parameters
+        // hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMStateMap *state_hmm_map)
+        for (int h = 0; h < hmm_size; h++) {
+            fprintf(stderr, "HMM %d ... \n", h);
+            hmm_update_gmm(hmm_set[h], h, fs, alignset, trans_mat_set);
+        }
+
+        bestpath_ll /= (float) fs->feat_num;
+        fprintf(stderr, "Current likelihood: %f\n", bestpath_ll);
+
+        if (bestpath_ll < avg_ll) {
+            fprintf(stderr, "Liklihood decreased, something bad happened.\n");
+            break;
+        }
+
+        if (bestpath_ll - avg_ll < tolerance) {
+            fprintf(stderr, "Likelihood converged.\n");
+            break;
+        }
+
+        iter++;
+        avg_ll = bestpath_ll;
+        bestpath_ll = 0.0;
+    }
+
+    // free up the memory
+    for (int t = 0; t < db->record_size; t++) {
+        free(alignset[t]);
+    }
+    free(trans_mat_set);
+    free(feat_struct_set);
+    free(alignset);
+}
 
 /*
  * Given a FeatureSet, an HMM, updates the HMM GMM's parameters iteratively
@@ -437,7 +526,7 @@ void hmm_train_kmeans(HMM *hmm, FeatureSet *fs, int max_iter, float tolerance) {
             hmm_update_gmm(hmm, fs->feat[idx], fs->feat_sizes[idx], fs->feat_dim, alignset[idx]);
         }
         */
-        hmm_update_gmm(hmm, fs, alignset);
+        // hmm_update_gmm(hmm, fs, alignset);
 
         // compute the alignment
         for (int idx = 0; idx < fs->feat_num; idx++) {
