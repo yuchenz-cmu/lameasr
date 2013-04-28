@@ -454,7 +454,7 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
         trans_mat_set[t].dummy_states = 0;
 
         // total_states = topo_gen_transmat(hmm_set, hmm_size, topo_file, &trans_matrix, &state_mapping, &nodes_num, 0.0);
-        trans_mat_set[t].total_states = topo_gen_transmat(hmm_set, hmm_size, db->record[t].topo_file, &trans_mat_set[t].trans_matrix, &trans_mat_set[t].state_hmm_map, &trans_mat_set[t].dummy_states, 0.0);
+        trans_mat_set[t].total_states = topo_gen_transmat((void **)hmm_set, hmm_size, db->record[t].topo_file, &trans_mat_set[t].trans_matrix, &trans_mat_set[t].state_hmm_map, &trans_mat_set[t].dummy_states, 0.0);
     }
 
     // for every training utterance (feature), prepare a feature structure
@@ -591,32 +591,32 @@ int hmm_write(HMM *hmm, char *filename) {
         fwrite(&curr_gmm->gamma_count, sizeof(float), 1, fp);
 
         // write the GMM mean matrix
-        fprintf(stderr, "writing mean: \n");
+        // fprintf(stderr, "writing mean: \n");
         for (int g = 0; g < curr_gmm->mixture_num; g++) {
             fwrite(curr_gmm->mean[g], sizeof(float), curr_gmm->feat_dim, fp);
-            for (int d = 0; d < curr_gmm->feat_dim; d++) {
-                fprintf(stderr, "%f ", curr_gmm->mean[g][d]);
-            }
-            fprintf(stderr, "\n");
+            // for (int d = 0; d < curr_gmm->feat_dim; d++) {
+            //     fprintf(stderr, "%f ", curr_gmm->mean[g][d]);
+            // }
+            // fprintf(stderr, "\n");
         }
-        fprintf(stderr, "\n");
+        // fprintf(stderr, "\n");
 
-        fprintf(stderr, "writing var: \n");
+        // fprintf(stderr, "writing var: \n");
         // write the variance matrix
         for (int g = 0; g < curr_gmm->mixture_num; g++) {
             fwrite(curr_gmm->var[g], sizeof(float), curr_gmm->feat_dim, fp);
-            for (int d = 0; d < curr_gmm->feat_dim; d++) {
-                fprintf(stderr, "%f ", curr_gmm->var[g][d]);
-            }
-            fprintf(stderr, "\n");
+            // for (int d = 0; d < curr_gmm->feat_dim; d++) {
+            //     fprintf(stderr, "%f ", curr_gmm->var[g][d]);
+            // }
+            // fprintf(stderr, "\n");
         }
-        fprintf(stderr, "\n");
+        // fprintf(stderr, "\n");
 
-        fprintf(stderr, "Writing weights: \n");
-        for (int d = 0; d < curr_gmm->mixture_num; d++) {
-            fprintf(stderr, "%f ", curr_gmm->weight[d]);
-        }
-        fprintf(stderr, "\n");
+        // fprintf(stderr, "Writing weights: \n");
+        // for (int d = 0; d < curr_gmm->mixture_num; d++) {
+        //     fprintf(stderr, "%f ", curr_gmm->weight[d]);
+        // }
+        // fprintf(stderr, "\n");
         // writes the weights
         fwrite(curr_gmm->weight, sizeof(float), curr_gmm->mixture_num, fp);
     }

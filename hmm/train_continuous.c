@@ -47,16 +47,73 @@ int read_models(FILE *fmodel_list, HMM ***hmm_set) {
     return model_num;
 }
 
+void print_usage(char *msg) {
+    if (msg) {
+        fprintf(stderr, "%s\n", msg);
+    }
+    fprintf(stderr, "Usage: ./train_continuous --model-list <initial model list> --db <database file> --result-dir <result dir> --max-iter <maximum iteration> --feat-dim <feature dimension>\n");
+}
+
 int main(int argc, char **argv) {
-    char *model_list = "all_models.list";
-    // char *database_file = "train.db";
-    char *database_file = "train_10.db";
+    char *model_list = NULL; // "all_models.list";
+    char *database_file = NULL; // "train.db";
+    // char *database_file = "train_10.db";
     // char *database_file = "train_1.db";
     HMM **hmm_set = NULL;
     int max_iter = 20;
     float tolerance = 0.00001;
-    char *result_dir = "train_result";
+    char *result_dir = NULL; // "train_result";
     char filename_buf[512];
+    int feat_dim = 13;
+    int i = 1;
+
+    while (i < argc) {
+        if (!strcmp(argv[i], "--model-list")) {
+            if (i + 1 >= argc) {
+                print_usage("Missing argument.");
+                return 2;
+            }
+            model_list = argv[i + 1];
+            i += 2;
+        } else if (!strcmp(argv[i], "--db")) {
+            if (i + 1 >= argc) {
+                print_usage("Missing argument.");
+                return 2;
+            }
+            database_file = argv[i + 1];
+            i += 2;
+        } else if (!strcmp(argv[i], "--result-dir")) {
+            if (i + 1 >= argc) {
+                print_usage("Missing argument.");
+                return 2;
+            }
+            result_dir = argv[i + 1];
+            i += 2;
+        } else if (!strcmp(argv[i], "--max-iter")) {
+            if (i + 1 >= argc) {
+                print_usage("Missing argument.");
+                return 2;
+            }
+            max_iter = atoi(argv[i + 1]);
+            i += 2;
+        } else if (!strcmp(argv[i], "--feat-dim")) {
+            if (i + 1 >= argc) {
+                print_usage("Missing argument.");
+                return 2;
+            }
+            feat_dim = atoi(argv[i + 1]);
+            i += 2;
+        } else {
+            fprintf(stderr, "Invalid argument: %s\n", argv[i]);
+            print_usage(NULL);
+            return 3;
+        }
+    }
+
+    if (database_file == NULL || max_iter < 1 || result_dir == NULL || feat_dim < 1 || model_list == NULL) {
+        print_usage("Missing argument.");
+        return 4;
+    }
 
     FILE *fmodel_list = fopen(model_list, "r");
     int hmm_size = read_models(fmodel_list, &hmm_set);
@@ -66,7 +123,7 @@ int main(int argc, char **argv) {
 
     // void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance)
 
-    hmm_train_continuous(hmm_set, hmm_size, train_db, 13, max_iter, tolerance);
+    hmm_train_continuous(hmm_set, hmm_size, train_db, feat_dim, max_iter, tolerance);
 
     for (int h = 0; h < hmm_size; h++) {
         sprintf(filename_buf, "%s/%s.hmm", result_dir, hmm_set[h]->lex);

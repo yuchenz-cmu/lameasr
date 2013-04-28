@@ -27,8 +27,10 @@
 
 #define LINE_BUF_SIZE (256)
 
-int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matrix, HMMStateMap **state_mapping, int *total_dummy_nodes, float word_ins_penalty) {
+int topo_gen_transmat(void **hmm_set_void, int hmm_size, char *topofile, float ***matrix, HMMStateMap **state_mapping, int *total_dummy_nodes, float word_ins_penalty) {
     assert(hmm_size > 0); 
+    HMM **hmm_set = (HMM **) hmm_set_void;
+
     for (int h = 1; h < hmm_size; h++) {
         assert(hmm_set[h - 1]->state_num == hmm_set[h]->state_num);
     }
