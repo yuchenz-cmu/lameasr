@@ -142,7 +142,7 @@ int topo_gen_transmat(HMM **hmm_set, int hmm_size, char *topofile, float ***matr
         grid[hmm_set[hmm_id]->states[hmm_states_num - 1].id][hmm_set[hmm_id]->states[hmm_states_num - 1].id] = log(0.5);
 
         // last state ==> end dummy node
-        grid[hmm_set[hmm_id]->states[hmm_states_num - 1].id][curr_node->end_node] = log(0.5) + word_ins_penalty;    // log 1.0
+        grid[hmm_set[hmm_id]->states[hmm_states_num - 1].id][curr_node->end_node] = log(0.5);    // log 0.5
         // fprintf(stderr, "[%d] ==> [%d]*\n", hmm_set[hmm_id]->states[hmm_states_num - 1].id, curr_node->end_node);
 
         // free up memory

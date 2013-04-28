@@ -1,4 +1,4 @@
-all: decoder show_align train_continuous
+all: decoder show_align train_continuous 
 
 train_continuous: hmm.o topo.o train_continuous.o database.o gmm.o feat.o utils.o
 	gcc train_continuous.o hmm.o database.o gmm.o feat.o utils.o topo.o -o train_continuous -lm
@@ -69,6 +69,8 @@ clean:
 	-rm train_single_word.o
 	-rm show_align.o
 	-rm train_continuous.o
+	-rm database.o
+	-rm utils.o
 	-rm gmm 
 	-rm feat
 	-rm controller

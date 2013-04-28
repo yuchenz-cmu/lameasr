@@ -29,6 +29,8 @@
 #include "database.h"
 
 #define MAX_GAUSSIANS (4)
+#define VAR_FLOOR (0.0001)
+#define MIN_PROB (0.00001)
 
 void hmm_align_equal(int feat_size, int slice, int *align) {
     assert (feat_size >= slice);
@@ -39,7 +41,7 @@ void hmm_align_equal(int feat_size, int slice, int *align) {
 }
 
 float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, FeatureStruct *feat_struct, int *align) {
-    fprintf(stderr, "hmm_decode_viterbi():\n");
+    // fprintf(stderr, "hmm_decode_viterbi():\n");
     assert (hmm_size > 0);
     int total_states = trans_mat->total_states;
     int dummy_states = trans_mat->dummy_states;
@@ -48,7 +50,7 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
     int feat_size = feat_struct->feat_size;
     int feat_dim = feat_struct->feat_dim;
     float **feat = feat_struct->feat;
-    
+
     // allocate the trellis
     HMMTrellis **trellis = (HMMTrellis **) malloc(sizeof(HMMTrellis *) * feat_size);
     for (int t = 0; t < feat_size; t++) {
@@ -67,10 +69,13 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
             int s_hmm_state_idx = state_hmm_map[s].hmm_state_id;
             float gmm_ll = gmm_likelihood(hmm_set[s_hmm_idx]->states[s_hmm_state_idx].gmm, feat[0], feat_dim);
             trellis[0][s].value = trellis[0][0].value + trans_matrix[0][s] + gmm_ll;
+            trellis[0][s].prev.s = 0;
+            trellis[0][s].prev.t = 0;
+            // fprintf(stderr, "%d ==> %d = %f\n", 0, s, trellis[0][s].value);
         }
     }
-    
-    // here we go ... 
+
+    // here we go ...
     int t = 0;
     int ts_hmm_idx = 0;
     int ds_hmm_idx = 0;
@@ -98,7 +103,7 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
                     trellis[t + 1][ts].prev.t = t;
                 }
             }
-            
+
         }
 
         // fill next column's dummy states with regular states from next column
@@ -122,18 +127,41 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
 
     fprintf(stderr, "Doing back trace ... \n");
     // backtrace
+    
+    // int end_max_state = -1;
+    // float end_max_ll = -FLT_MAX;
+    // for (int s = 0; s < total_states; s++) {
+    // for (int s = 0; s < dummy_states; s++) {
+    //     if (trellis[feat_size - 1][s].value > end_max_ll) {
+    //         end_max_state = s;
+    //         end_max_ll = trellis[feat_size - 1][s].value;
+    //     }
+    // }
+    
     int end_state = dummy_states - 1;
-    float end_ll = trellis[feat_size - 1][end_state].value; 
+    float end_ll = trellis[feat_size - 1][end_state].value;
+    // fprintf(stderr, "end_max_state: %d(ll: %f), end_state: %d(ll: %f)\n", end_max_state, end_max_ll, end_state, end_ll);
+    
     int curr_st = end_state;
     int curr_t = feat_size - 1;
     while (curr_t >= 0) {
         // we only keep alignment of regular states, ignore dummy states
-        while (curr_st < dummy_states) {
+        while (curr_st < dummy_states && curr_st >= 0) {
+            // fprintf(stderr, "skipping dummy state %d\n", curr_st);
             curr_st = trellis[curr_t][curr_st].prev.s;
         }
+        if (curr_st < 0 || curr_st >= total_states) {
+            break;
+        }
+        // fprintf(stderr, "curr_st: %d  curr_t: %d\n", curr_st, curr_t);
         align[curr_t] = curr_st;
         curr_st = trellis[curr_t][curr_st].prev.s;
         curr_t--;
+    }
+
+    // hack
+    if (align[0] < dummy_states && align[1] >= dummy_states) {
+        align[0] = align[1];
     }
 
     // free-up memory
@@ -141,6 +169,11 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
         free(trellis[t]);
     }
     free(trellis);
+
+    if ((curr_st < 0 || curr_st >= total_states) && curr_t > 0) {
+        fprintf(stderr, "Failed to back-trace at time %d.\n", curr_t);
+        fprintf(stderr, "Arrived at state %d at time %d ... \n", curr_st, curr_t);
+    }
 
     return end_ll;
 }
@@ -243,7 +276,7 @@ void hmm_clear_gmm(HMM *hmm) {
     }
 }
 
-void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransMatrix *trans_mat_set) {
+int hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransMatrix *trans_mat_set) {
     assert (hmm->state_num > 0);
 
     float *acc_gamma = NULL;
@@ -254,6 +287,7 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransM
     int mixture_num = 0;
     float **curr_feat = NULL;
     int curr_feat_size = 0;
+    int total_acc_frames = 0;
 
     for (int s = 0; s < hmm->state_num; s++) {
         // fprintf(stderr, "Training state %d ... \n", s);
@@ -280,6 +314,7 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransM
         }
 
         // for every utterance
+        int acc_frame_count = 0;
         for (int idx = 0; idx < fs->feat_num; idx++) {
             curr_feat = fs->feat[idx];
             curr_feat_size = fs->feat_sizes[idx];
@@ -291,6 +326,8 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransM
                 if (curr_state_map[alignset[idx][t]].hmm_id != hmm_id || curr_state_map[alignset[idx][t]].hmm_state_id != s) {
                     continue;
                 }
+                acc_frame_count++;
+                total_acc_frames++;
                 // fprintf(stderr, "hmm_id: %d, hmm_state_id: %d, align_state_id: %d\n", hmm_id, s, alignset[idx][t]);
 
                 gammaD = 0.0;
@@ -298,8 +335,21 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransM
                 // fprintf(stderr, "gs_gammas[g]: ");
                 for (int g = 0; g < mixture_num; g++) {
                     gs_gammas[g] = exp(gmm_likelihood_idx(hmm->states[s].gmm, g, curr_feat[t], fs->feat_dim)) * hmm->states[s].gmm->weight[g];
+
+                    if (isnan(gs_gammas[g])) {
+                        fprintf(stderr, "Mean: \n");
+                        for (int mean_d = 0; mean_d < 13; mean_d++) {
+                            fprintf(stderr, "%f ", hmm->states[s].gmm->mean[g][mean_d]);
+                        }
+                        fprintf(stderr, "\nVars: \n");
+                        for (int vars_d = 0; vars_d < 13; vars_d++) {
+                            fprintf(stderr, "%f ", hmm->states[s].gmm->var[g][vars_d]);
+                        }
+                        fprintf(stderr, "\n");
+                    }
+
                     gammaD += gs_gammas[g];
-                    // fprintf(stderr, "%f ", gs_gammas[g]);
+                    // fprintf(stderr, "%.10f (%f, %f) ", gs_gammas[g], exp(gmm_likelihood_idx(hmm->states[s].gmm, g, curr_feat[t], fs->feat_dim)), hmm->states[s].gmm->weight[g]);
                 }
                 // fprintf(stderr, "\n");
                 // fprintf(stderr, "gammaD: %f\n", gammaD);
@@ -309,6 +359,9 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransM
                 for (int g = 0; g < mixture_num; g++) {
                     float curr_gamma = (float) gs_gammas[g] / (float) gammaD;
                     // fprintf(stderr, "%f ", curr_gamma);
+                    
+                    // fprintf(stderr, "curr_gamma: %f, gs_gamma[g]: %f, gammD: %f\n", curr_gamma, gs_gammas[g], gammaD);
+                    assert (curr_gamma <= 1.0);
                     acc_gamma[g] += curr_gamma;
                     for (int d = 0; d < fs->feat_dim; d++) {
                         acc_mean[g][d] += curr_gamma * curr_feat[t][d];
@@ -319,6 +372,8 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransM
             }
 
         }
+
+        // fprintf(stderr, "GAMMA: accumulated %d frames.\n", acc_frame_count);
         // for every gaussian, update mean, var and weight
         float all_gammas = 0.0;
         for (int g = 0; g < mixture_num; g++) {
@@ -326,14 +381,28 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransM
         }
 
         for (int g = 0; g < mixture_num; g++) {
-            fprintf(stderr, "mean: ");
+            // fprintf(stderr, "mean: ");
+            // fprintf(stderr, "var: ");
             for (int d = 0; d < fs->feat_dim; d++) {
+                if (isnan(1.0 / (float) acc_gamma[g]) || isinf(1.0 / (float) acc_gamma[g])) {
+                    fprintf(stderr, "acc_gamma[g] == 0.0, skip.\n");
+                    continue;
+                }
+
                 float new_mean = (float) acc_mean[g][d] / (float) acc_gamma[g];
+                // fprintf(stderr, "%f->", hmm->states[s].gmm->mean[g][d]);
+                // fprintf(stderr, "%.15f->", hmm->states[s].gmm->var[g][d]);
                 hmm->states[s].gmm->mean[g][d] = new_mean;
                 hmm->states[s].gmm->var[g][d] = (float) acc_var[g][d] / (float) acc_gamma[g] - new_mean * new_mean;
-                fprintf(stderr, "%f ", hmm->states[s].gmm->mean[g][d]);
+
+                if (hmm->states[s].gmm->var[g][d] < VAR_FLOOR) {
+                    hmm->states[s].gmm->var[g][d] = VAR_FLOOR;
+                }
+
+                // fprintf(stderr, "%f ", hmm->states[s].gmm->mean[g][d]);
+                // fprintf(stderr, "%.15f ", hmm->states[s].gmm->var[g][d]);
             }
-            fprintf(stderr, "\n");
+            // fprintf(stderr, "\n");
             hmm->states[s].gmm->weight[g] = (float) acc_gamma[g] / (float) all_gammas;
         }
 
@@ -351,6 +420,8 @@ void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransM
         acc_gamma = NULL;
         gs_gammas = NULL;
     }
+
+    return total_acc_frames;
 }
 
 void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance) {
@@ -407,6 +478,7 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
             curr_ll = hmm_decode_viterbi(hmm_set, hmm_size, &trans_mat_set[feat_idx], &feat_struct_set[feat_idx], alignset[feat_idx]);
             bestpath_ll += curr_ll;
             fprintf(stderr, "Likelihood for utterance %d is %f\n", feat_idx, curr_ll);
+            /* 
             fprintf(stderr, "Alignment for '%s' is \n", db->record[feat_idx].text);
 
             int prev_hmm_id = -1;
@@ -423,26 +495,41 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
             }
             fprintf(stderr, "\n");
 
+            prev_hmm_id = -1;
             for (int t = 0; t < fs->feat_sizes[feat_idx]; t++) {
-                fprintf(stderr, "%d ", alignset[feat_idx][t]);
+                int curr_hmm_state_id = trans_mat_set[feat_idx].state_hmm_map[alignset[feat_idx][t]].hmm_state_id;
+                int curr_hmm_id = trans_mat_set[feat_idx].state_hmm_map[alignset[feat_idx][t]].hmm_id;
+                if (curr_hmm_id != prev_hmm_id) {
+                    fprintf(stderr, "\n");
+                    prev_hmm_id = curr_hmm_id;
+                }
+                fprintf(stderr, "%d(%d %d) ", t, curr_hmm_id, curr_hmm_state_id);
             }
             fprintf(stderr, "\n");
+            */ 
         }
 
         // update the hmm parameters
         // hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMStateMap *state_hmm_map)
+        int total_acc_frames = 0;
         for (int h = 0; h < hmm_size; h++) {
             fprintf(stderr, "HMM %d ... \n", h);
-            hmm_update_gmm(hmm_set[h], h, fs, alignset, trans_mat_set);
+            total_acc_frames += hmm_update_gmm(hmm_set[h], h, fs, alignset, trans_mat_set);
         }
+
+        int total_frames_count = 0;
+        for (int f = 0; f < fs->feat_num; f++) {
+            total_frames_count += fs->feat_sizes[f];
+        }
+        fprintf(stderr, "Total frames: %d, accmumulated on %d\n", total_frames_count, total_acc_frames);
 
         bestpath_ll /= (float) fs->feat_num;
         fprintf(stderr, "Current likelihood: %f\n", bestpath_ll);
 
-        if (bestpath_ll < avg_ll) {
-            fprintf(stderr, "Liklihood decreased, something bad happened.\n");
-            break;
-        }
+        // if (bestpath_ll < avg_ll) {
+        //     fprintf(stderr, "Liklihood decreased, something bad happened.\n");
+        //     break;
+        // }
 
         if (bestpath_ll - avg_ll < tolerance) {
             fprintf(stderr, "Likelihood converged.\n");
@@ -460,105 +547,6 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
     }
     free(trans_mat_set);
     free(feat_struct_set);
-    free(alignset);
-}
-
-/*
- * Given a FeatureSet, an HMM, updates the HMM GMM's parameters iteratively
- * (First iteration is divided equally, the rest uses DTW alignment)
- * */
-void hmm_train_kmeans(HMM *hmm, FeatureSet *fs, int max_iter, float tolerance) {
-    assert (fs->feat_num > 0);
-
-    // clears the GMMs and set global mean, var and equal weight
-    hmm_clear_gmm(hmm);
-    for (int s = 0; s < hmm->state_num; s++) {
-        gmm_mean_var(hmm->states[s].gmm, fs->feat[0], fs->feat_sizes[0], fs->feat_dim);
-
-        float eq_wght = 1.0 / (float) hmm->states[s].gmm->mixture_num;
-        for (int g = 0; g < hmm->states[s].gmm->mixture_num; g++) {
-            hmm->states[s].gmm->weight[g] = eq_wght;
-        }
-    }
-
-    // create the alignment tables
-    int **alignset = (int **) malloc(sizeof(int *) * fs->feat_num);
-    for (int idx = 0; idx < fs->feat_num; idx++) {
-        alignset[idx] = (int *) malloc(sizeof(int) * fs->feat_sizes[idx]);
-
-        // initial equal alignment
-        hmm_align_equal(fs->feat_sizes[idx], hmm->state_num, alignset[idx]);
-    }
-
-    // keep track of likelihoods of the previous run
-    float avg_ll = -FLT_MAX;
-    float bestpath_ll = 0.0;
-    float curr_ll = 0.0;
-    int iter = 0;
-    int curr_gs_num = 1;
-
-    while (iter < max_iter) {
-
-        // splitting gaussians
-        if (iter % 4 == 3 && curr_gs_num < MAX_GAUSSIANS) {
-        // if (0) {
-            fprintf(stderr, "Splitting gaussians ... \n");
-            for (int s = 0; s < hmm->state_num; s++) {
-                gmm_split_max_var(hmm->states[s].gmm);
-            }
-            float avg_ll = -FLT_MAX;
-            curr_gs_num++;
-        }
-
-        fprintf(stderr, "Iteration: %d\n", iter);
-        fprintf(stderr, "weights: ");
-        for (int g = 0; g < hmm->states[0].gmm->mixture_num; g++) {
-            fprintf(stderr, "%f ", hmm->states[0].gmm->weight[g]);
-        }
-        fprintf(stderr, "\n");
-
-        // clears the hmm
-        // hmm_clear_gmm(hmm);
-
-        // update the model
-        /*
-        for (int idx = 0; idx < fs->feat_num; idx++) {
-            hmm_update_gmm(hmm, fs->feat[idx], fs->feat_sizes[idx], fs->feat_dim, alignset[idx]);
-        }
-        */
-        // hmm_update_gmm(hmm, fs, alignset);
-
-        // compute the alignment
-        for (int idx = 0; idx < fs->feat_num; idx++) {
-            // for (int t = 0; t < fs->feat_sizes[idx]; t++) {
-            //     fprintf(stderr, "%d ", alignset[idx][t]);
-            // }
-            // fprintf(stderr, "\n");
-
-            curr_ll = hmm_align_dtw(hmm, fs->feat[idx], fs->feat_sizes[idx], fs->feat_dim, alignset[idx]) / (float) fs->feat_sizes[idx];
-            bestpath_ll += curr_ll;
-            fprintf(stderr, "idx: %d, curr_ll: %f\n", idx, curr_ll);
-        }
-
-        bestpath_ll /= (float) fs->feat_num;
-        if (bestpath_ll < avg_ll) {
-            fprintf(stderr, "Liklihood decreased, something bad happened.\n");
-            break;
-        }
-
-        if (bestpath_ll - avg_ll < tolerance) {
-            fprintf(stderr, "Likelihood converged.\n");
-            break;
-        }
-
-        iter++;
-        avg_ll = bestpath_ll;
-        bestpath_ll = 0.0;
-    }
-
-    for (int idx = 0; idx < fs->feat_num; idx++) {
-        free(alignset[idx]);
-    }
     free(alignset);
 }
 

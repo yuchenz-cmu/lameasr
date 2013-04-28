@@ -49,21 +49,23 @@ int read_models(FILE *fmodel_list, HMM ***hmm_set) {
 
 int main(int argc, char **argv) {
     char *model_list = "all_models.list";
-    char *database_file = "train.db";
+    // char *database_file = "train.db";
+    char *database_file = "train_10.db";
+    // char *database_file = "train_1.db";
     HMM **hmm_set = NULL;
-    int max_iter = 100;
-    float tolerance = 0.001;
+    int max_iter = 20;
+    float tolerance = 0.00001;
     char *result_dir = "train_result";
     char filename_buf[512];
 
     FILE *fmodel_list = fopen(model_list, "r");
     int hmm_size = read_models(fmodel_list, &hmm_set);
-    fclose(fmodel_list); 
+    fclose(fmodel_list);
 
     Database *train_db = read_database(database_file);
 
-    // void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance)     
-    
+    // void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance)
+
     hmm_train_continuous(hmm_set, hmm_size, train_db, 13, max_iter, tolerance);
 
     for (int h = 0; h < hmm_size; h++) {
@@ -71,7 +73,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Writing model for %s\n", filename_buf);
         hmm_write(hmm_set[h], filename_buf);
     }
-    
+
     return 0;
 }
 

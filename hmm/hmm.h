@@ -43,8 +43,9 @@ HMM *hmm_init(int state_num, int gs_num, int feat_dim, char *lex);
 /*
  * Given an HMM, a FeatureSet, and a set of alignment of being at which state at time t,
  * update the GMM's parameters
+ * Return: number of total frames used in accmulation
  */
-void hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransMatrix *trans_mat_set);
+int hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransMatrix *trans_mat_set);
 
 void hmm_clear_gmm(HMM *hmm);
 
@@ -52,7 +53,8 @@ void hmm_clear_gmm(HMM *hmm);
  * Fills the align array with equal alignment, assume align is of length feat_size
  */
 void hmm_align_equal(int feat_size, int slice, int *align);
-void hmm_train_kmeans(HMM *hmm, FeatureSet *fs, int max_iter, float tolerance);
+
+// void hmm_train_kmeans(HMM *hmm, FeatureSet *fs, int max_iter, float tolerance);
 
 /*
  * Outputs an HMM to file.
