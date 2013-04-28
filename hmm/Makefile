@@ -1,4 +1,10 @@
-all: decoder show_align train_continuous 
+all: decoder show_align train_continuous edit_hmm
+
+edit_hmm: edit_hmm.o hmm.o feat.o gmm.o topo.o utils.o align.o
+	gcc edit_hmm.o hmm.o feat.o gmm.o topo.o utils.o align.o -o edit_hmm -lm
+
+edit_hmm.o: edit_hmm.c
+	gcc -g -std=c99 -c edit_hmm.c -o edit_hmm.o
 
 train_continuous: hmm.o topo.o train_continuous.o database.o gmm.o feat.o utils.o
 	gcc train_continuous.o hmm.o database.o gmm.o feat.o utils.o topo.o -o train_continuous -lm
@@ -71,6 +77,8 @@ clean:
 	-rm train_continuous.o
 	-rm database.o
 	-rm utils.o
+	-rm edit_hmm.o
+	-rm edit_hmm
 	-rm gmm 
 	-rm feat
 	-rm controller
