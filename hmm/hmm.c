@@ -385,7 +385,7 @@ int hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransMa
             // fprintf(stderr, "var: ");
             for (int d = 0; d < fs->feat_dim; d++) {
                 if (isnan(1.0 / (float) acc_gamma[g]) || isinf(1.0 / (float) acc_gamma[g])) {
-                    fprintf(stderr, "acc_gamma[g] == 0.0, skip.\n");
+                    // fprintf(stderr, "acc_gamma[g] == 0.0, skip.\n");
                     continue;
                 }
 
@@ -424,12 +424,12 @@ int hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransMa
     return total_acc_frames;
 }
 
-void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance) {
+void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance, int init_capacity) {
     assert (hmm_size > 0);
 
     // prepare the FeatureSet from database
     fprintf(stderr, "Reading features ... \n");
-    FeatureSet *fs = featset_init(feat_dim);
+    FeatureSet *fs = featset_init(feat_dim, init_capacity);
     for (int r = 0; r < db->record_size; r++) {
         if (db->record[r].feat_file[strlen(db->record[r].feat_file) - 1] == '\n') {
             db->record[r].feat_file[strlen(db->record[r].feat_file) - 1] = '\0';

@@ -77,6 +77,6 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
 /*  
  * Train a set of HMMs from a set of features and a set of topologies
  */
-void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance);
+void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance, int init_capacity);
 
 #endif

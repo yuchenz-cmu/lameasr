@@ -51,7 +51,7 @@ void print_usage(char *msg) {
     if (msg) {
         fprintf(stderr, "%s\n", msg);
     }
-    fprintf(stderr, "Usage: ./train_continuous --model-list <initial model list> --db <database file> --result-dir <result dir> --max-iter <maximum iteration> --feat-dim <feature dimension>\n");
+    fprintf(stderr, "Usage: ./train_continuous --model-list <initial model list> --db <database file> --result-dir <result dir> --max-iter <maximum iteration> --feat-dim <feature dimension> --init-capacity [initial feature capacity]\n");
 }
 
 int main(int argc, char **argv) {
@@ -66,6 +66,7 @@ int main(int argc, char **argv) {
     char filename_buf[512];
     int feat_dim = 13;
     int i = 1;
+    int init_feat_capacity = 64;
 
     while (i < argc) {
         if (!strcmp(argv[i], "--model-list")) {
@@ -103,6 +104,13 @@ int main(int argc, char **argv) {
             }
             feat_dim = atoi(argv[i + 1]);
             i += 2;
+        } else if (!strcmp(argv[i], "--init-capacity")) {
+            if (i + 1 >= argc) {
+                print_usage("Missing argument.");
+                return 2;
+            }
+            init_feat_capacity = atoi(argv[i + 1]);
+            i += 2;
         } else {
             fprintf(stderr, "Invalid argument: %s\n", argv[i]);
             print_usage(NULL);
@@ -123,7 +131,7 @@ int main(int argc, char **argv) {
 
     // void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_dim, int max_iter, float tolerance)
 
-    hmm_train_continuous(hmm_set, hmm_size, train_db, feat_dim, max_iter, tolerance);
+    hmm_train_continuous(hmm_set, hmm_size, train_db, feat_dim, max_iter, tolerance, init_feat_capacity);
 
     for (int h = 0; h < hmm_size; h++) {
         sprintf(filename_buf, "%s/%s.hmm", result_dir, hmm_set[h]->lex);
