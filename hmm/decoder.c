@@ -133,13 +133,13 @@ int main(int argc, char **argv) {
     int total_states = 0;
     int nodes_num = 0;
 
-    total_states = topo_gen_transmat(hmm_set, hmm_size, topo_file, &trans_matrix, &state_mapping, &nodes_num, 0.0);
+    total_states = topo_gen_transmat((void **)hmm_set, hmm_size, topo_file, &trans_matrix, &state_mapping, &nodes_num, 0.0);
     fprintf(stderr, "Loaded topology for HMM.\n");
 
     // prepare for decoding
     TransMatrix trans_mat;
     FeatureStruct feat_struct;
-    FeatureSet *decode_fs = featset_init(feat_dim); 
+    FeatureSet *decode_fs = featset_init(feat_dim, 16); 
 
     trans_mat.trans_matrix = trans_matrix;
     trans_mat.state_hmm_map = state_mapping;

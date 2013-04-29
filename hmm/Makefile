@@ -78,6 +78,7 @@ clean:
 	-rm database.o
 	-rm utils.o
 	-rm edit_hmm.o
+	-rm decoder.o
 	-rm edit_hmm
 	-rm gmm 
 	-rm feat
@@ -86,3 +87,4 @@ clean:
 	-rm train_single_word
 	-rm show_align
 	-rm train_continuous
+	-rm decoder
