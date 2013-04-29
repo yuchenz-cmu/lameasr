@@ -361,7 +361,13 @@ int hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, TransMa
                     // fprintf(stderr, "%f ", curr_gamma);
                     
                     // fprintf(stderr, "curr_gamma: %f, gs_gamma[g]: %f, gammD: %f\n", curr_gamma, gs_gammas[g], gammaD);
-                    assert (curr_gamma <= 1.0);
+                    // assert (curr_gamma <= 1.0);
+
+                    if (isnan(curr_gamma)) {
+                        curr_gamma = 0.1;
+                        fprintf(stderr, "gs_gammas[g]: %.32f, gammaD: %.32f\n", gs_gammas[g], gammaD);
+                        fprintf(stderr, "Warning: curr_gamma is nan.\n");
+                    }
                     acc_gamma[g] += curr_gamma;
                     for (int d = 0; d < fs->feat_dim; d++) {
                         acc_mean[g][d] += curr_gamma * curr_feat[t][d];
@@ -531,10 +537,10 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
         //     break;
         // }
 
-        if (bestpath_ll - avg_ll < tolerance) {
-            fprintf(stderr, "Likelihood converged.\n");
-            break;
-        }
+        // if (bestpath_ll - avg_ll < tolerance) {
+        //     fprintf(stderr, "Likelihood converged.\n");
+        //     break;
+        // }
 
         iter++;
         avg_ll = bestpath_ll;
