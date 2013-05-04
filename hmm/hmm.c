@@ -125,7 +125,7 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
         t++;
     }
 
-    fprintf(stderr, "Doing back trace ... \n");
+    // fprintf(stderr, "Doing back trace ... \n");
     // backtrace
     
     // int end_max_state = -1;
@@ -440,7 +440,7 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
         if (db->record[r].feat_file[strlen(db->record[r].feat_file) - 1] == '\n') {
             db->record[r].feat_file[strlen(db->record[r].feat_file) - 1] = '\0';
         }
-        fprintf(stderr, "Reading from %s ... \n", db->record[r].feat_file);
+        // fprintf(stderr, "Reading from %s ... \n", db->record[r].feat_file);
         featset_read_file(db->record[r].feat_file, fs);
     }
     fprintf(stderr, "done.\n");
@@ -483,7 +483,8 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
             // hmm_decode_viterbi(hmm_set, hmm_size, &trans_mat, &feat_struct, align);
             curr_ll = hmm_decode_viterbi(hmm_set, hmm_size, &trans_mat_set[feat_idx], &feat_struct_set[feat_idx], alignset[feat_idx]);
             bestpath_ll += curr_ll;
-            fprintf(stderr, "Likelihood for utterance %d is %f\n", feat_idx, curr_ll);
+            // fprintf(stderr, "Iteration %d: Likelihood for utterance %d is %f\n", iter, feat_idx, curr_ll);
+            fprintf(stderr, "\rUtterance %d ... ", feat_idx);
             /* 
             fprintf(stderr, "Alignment for '%s' is \n", db->record[feat_idx].text);
 
@@ -514,12 +515,13 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
             fprintf(stderr, "\n");
             */ 
         }
+        fprintf(stderr, "\n");
 
         // update the hmm parameters
         // hmm_update_gmm(HMM *hmm, int hmm_id, FeatureSet *fs, int **alignset, HMMStateMap *state_hmm_map)
         int total_acc_frames = 0;
         for (int h = 0; h < hmm_size; h++) {
-            fprintf(stderr, "HMM %d ... \n", h);
+            // fprintf(stderr, "HMM %d ... \n", h);
             total_acc_frames += hmm_update_gmm(hmm_set[h], h, fs, alignset, trans_mat_set);
         }
 
@@ -530,7 +532,7 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
         fprintf(stderr, "Total frames: %d, accmumulated on %d\n", total_frames_count, total_acc_frames);
 
         bestpath_ll /= (float) fs->feat_num;
-        fprintf(stderr, "Current likelihood: %f\n", bestpath_ll);
+        fprintf(stderr, "Iter %d: Current likelihood: %f\n", iter,  bestpath_ll);
 
         // if (bestpath_ll < avg_ll) {
         //     fprintf(stderr, "Liklihood decreased, something bad happened.\n");
