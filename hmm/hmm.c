@@ -124,19 +124,6 @@ float hmm_decode_viterbi(HMM **hmm_set, int hmm_size, TransMatrix *trans_mat, Fe
 
         t++;
     }
-
-    // fprintf(stderr, "Doing back trace ... \n");
-    // backtrace
-    
-    // int end_max_state = -1;
-    // float end_max_ll = -FLT_MAX;
-    // for (int s = 0; s < total_states; s++) {
-    // for (int s = 0; s < dummy_states; s++) {
-    //     if (trellis[feat_size - 1][s].value > end_max_ll) {
-    //         end_max_state = s;
-    //         end_max_ll = trellis[feat_size - 1][s].value;
-    //     }
-    // }
     
     int end_state = dummy_states - 1;
     float end_ll = trellis[feat_size - 1][end_state].value;
@@ -485,35 +472,6 @@ void hmm_train_continuous(HMM **hmm_set, int hmm_size, Database *db, int feat_di
             bestpath_ll += curr_ll;
             // fprintf(stderr, "Iteration %d: Likelihood for utterance %d is %f\n", iter, feat_idx, curr_ll);
             fprintf(stderr, "\rUtterance %d ... ", feat_idx);
-            /* 
-            fprintf(stderr, "Alignment for '%s' is \n", db->record[feat_idx].text);
-
-            int prev_hmm_id = -1;
-            for (int t = 0; t < fs->feat_sizes[feat_idx]; t++) {
-                int curr_hmm_id = trans_mat_set[feat_idx].state_hmm_map[alignset[feat_idx][t]].hmm_id;
-                if (curr_hmm_id < 0 || curr_hmm_id >= hmm_size) {
-                    continue;
-                }
-
-                if (curr_hmm_id != prev_hmm_id) {
-                    fprintf(stderr, "%d(%s) ", curr_hmm_id,  hmm_set[curr_hmm_id]->lex);
-                    prev_hmm_id = curr_hmm_id;
-                }
-            }
-            fprintf(stderr, "\n");
-
-            prev_hmm_id = -1;
-            for (int t = 0; t < fs->feat_sizes[feat_idx]; t++) {
-                int curr_hmm_state_id = trans_mat_set[feat_idx].state_hmm_map[alignset[feat_idx][t]].hmm_state_id;
-                int curr_hmm_id = trans_mat_set[feat_idx].state_hmm_map[alignset[feat_idx][t]].hmm_id;
-                if (curr_hmm_id != prev_hmm_id) {
-                    fprintf(stderr, "\n");
-                    prev_hmm_id = curr_hmm_id;
-                }
-                fprintf(stderr, "%d(%d %d) ", t, curr_hmm_id, curr_hmm_state_id);
-            }
-            fprintf(stderr, "\n");
-            */ 
         }
         fprintf(stderr, "\n");
 
@@ -613,19 +571,7 @@ int hmm_write(HMM *hmm, char *filename) {
         // write the variance matrix
         for (int g = 0; g < curr_gmm->mixture_num; g++) {
             fwrite(curr_gmm->var[g], sizeof(float), curr_gmm->feat_dim, fp);
-            // for (int d = 0; d < curr_gmm->feat_dim; d++) {
-            //     fprintf(stderr, "%f ", curr_gmm->var[g][d]);
-            // }
-            // fprintf(stderr, "\n");
         }
-        // fprintf(stderr, "\n");
-
-        // fprintf(stderr, "Writing weights: \n");
-        // for (int d = 0; d < curr_gmm->mixture_num; d++) {
-        //     fprintf(stderr, "%f ", curr_gmm->weight[d]);
-        // }
-        // fprintf(stderr, "\n");
-        // writes the weights
         fwrite(curr_gmm->weight, sizeof(float), curr_gmm->mixture_num, fp);
     }
 

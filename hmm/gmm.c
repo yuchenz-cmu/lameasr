@@ -40,9 +40,6 @@ void gmm_clear(GMM *gmm) {
     gmm->feat_count = 0;
 }
 
-/* 
- * Computes the variance constant of the given gmm
- * */
 void gmm_var_const(GMM *gmm) {
     // compute the variance constant
     gmm->var_const = -0.5 * gmm->feat_dim * LN_2PI;
@@ -53,9 +50,6 @@ void gmm_var_const(GMM *gmm) {
     gmm->var_const += -0.5 * tmp;
 }
 
-/* 
- * Currently only deal with the case of mixture_num == 1
- * */
 int gmm_mean_var(GMM *gmm, float **feat, int feat_size, int feat_dim) {
     assert (gmm->mixture_num > 0);
     assert (gmm->feat_dim == feat_dim);
@@ -104,9 +98,6 @@ int gmm_mean_var(GMM *gmm, float **feat, int feat_size, int feat_dim) {
     return 1;
 }
 
-/* 
- * Computes the likelihood of a frame given kth gaussian, not multiplying the weight
- */
 float gmm_likelihood_idx(GMM *gmm, int k, float *feat, int feat_dim) {
     assert (gmm->feat_dim == feat_dim);
 
@@ -133,19 +124,6 @@ float gmm_likelihood_idx(GMM *gmm, int k, float *feat, int feat_dim) {
     return ll;
 }
 
-/* 
- * Computes the log-likelihood of a feature vector given GMM
- * */
-/*  
-float gmm_likelihood(GMM *gmm, float *feat, int feat_dim) {
-    assert (gmm->mixture_num == 1);
-    return gmm_likelihood_idx(gmm, 0, feat, feat_dim);
-}
-*/ 
-
-/* 
- * Computes the log-likelihood of a feature vector given GMM
- * */
 float gmm_likelihood(GMM *gmm, float *feat, int feat_dim) {
     assert (gmm->mixture_num > 0);
 
@@ -160,10 +138,6 @@ float gmm_likelihood(GMM *gmm, float *feat, int feat_dim) {
     return ll;
 }
 
-/* 
- * Given a GMM, split the gaussian with largest var
- * Returns the current mixture number
- * */
 int gmm_split_max_var(GMM *gmm) {
     assert (gmm->mixture_num > 0);
 
@@ -227,9 +201,6 @@ int gmm_split_max_var(GMM *gmm) {
     return gmm->mixture_num;
 }
 
-/*  
- * Initialize the GMM with mixture number and feature dimension
- * */
 GMM* gmm_init(int mixture_num, int feat_dim) {
     GMM *gmm = (GMM *) malloc(sizeof(GMM));
     gmm->feat_dim = feat_dim;
@@ -247,9 +218,6 @@ GMM* gmm_init(int mixture_num, int feat_dim) {
     return gmm;
 }
 
-/* 
- * Normalize the weight of the gmm to sum up to 1
- * */
 void gmm_normalize_weight(GMM *gmm) {
     assert (gmm->mixture_num > 0);
 
