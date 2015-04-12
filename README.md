@@ -1,4 +1,7 @@
-lameasr
+LightASR
 =======
 
-A lame automatic speech recognition system
+A light-weight HMM-GMM based automatic speech recognition system. 
+Contains:
+ - Decoder
+ - Acoustic model trainer
